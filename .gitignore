@@ -48,4 +48,7 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
-*data
+# raw FDI data folder
+data/
+
+*html
