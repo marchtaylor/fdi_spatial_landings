@@ -1,4 +1,8 @@
-# data link: https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/FAD/fdi/
+# data link: 
+# Gibin, Maurizio; Maksims Kovšars; Maciej Adamowicz; Zanzi, Antonella; 
+# Hekim, Zeynep (2022): Fisheries landings & effort: data by c-square. 
+# European Commission, Joint Research Centre (JRC) [Dataset] 
+# PID: http://data.europa.eu/89h/00ae6659-ddde-4314-a9da-717bb2e82582
 fnames <- list.files("data/FDI_spatial_data_EU28/")
 fnames <- fnames[grep(pattern = "spatial_landings", x = fnames)]
 fnames
