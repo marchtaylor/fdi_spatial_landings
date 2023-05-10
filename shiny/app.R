@@ -134,7 +134,7 @@ server <- function(input, output) {
       barplot2D(z = aggsub$percLandings, x = aggsub$lon[1], y = aggsub$lat[1],
         width = 1*sc, height = 0.5*sc,
         colour = aggsub$col, border = NA,
-        lwd.frame = 0.25, col.frame = "white")
+        lwd.frame = 0.25, col.frame = "black")
     }
     map("world", add = T, fill = T, col = 8, boundary = 1)
     box()
