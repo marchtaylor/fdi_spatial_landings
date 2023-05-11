@@ -17,25 +17,15 @@ library(pals)
 # Load data
 load("data.Rdata")
 
-# mesh_size_split <- strsplit(data$mesh_size_range, "D")
-# data$mesh_size_min <- unlist(lapply(mesh_size_split, 
-#   FUN = function(x){
-#     if(length(x)>0){
-#       as.numeric(x[1])
-#     }else{
-#       NaN
-#     }
-#   }))
-# data$mesh_size_max <- unlist(lapply(mesh_size_split, 
-#   FUN = function(x){
-#     if(length(x)>1){
-#       ifelse(x[2]=="XX", 250, as.numeric(x[2]))
-#     }else{
-#       NaN
-#     }
-#   }))
-
-
+# extract mesh size ranges
+mesh_size_split <- strsplit(data$mesh_size_range, "D")
+mesh_sizes <- suppressWarnings(as.numeric(do.call("c", mesh_size_split)))
+mesh_size_range <- range(unique(mesh_sizes), na.rm = TRUE)
+mesh_size_split <- lapply(mesh_size_split, FUN = function(x){if(length(x)<2){c(mesh_size_range)}else{x}})
+mesh_size_split <- lapply(mesh_size_split, FUN = function(x){if(x[2]=="XX"){c(x[1], mesh_size_range[2])}else{x}})
+data$mesh_size_min <- as.numeric(unlist(lapply(mesh_size_split, FUN = function(x){x[1]})))
+data$mesh_size_max <- as.numeric(unlist(lapply(mesh_size_split, FUN = function(x){x[2]})))
+  
 
 # Define UI
 ui <- fluidPage(
@@ -51,9 +41,9 @@ ui <- fluidPage(
         choices = sort(unique(data$gear_type)),
         multiple = TRUE),
       
-      # sliderInput("mesh_range", "Mesh range [mm]:", step = 10, sep = "",
-      #   min = 0, max = 250,
-      #   value = c(0, 250)),
+      sliderInput("mesh_range", "Mesh range [mm]:", step = 10, sep = "",
+        min = 0, max = 250,
+        value = c(0, 250)),
       
       selectInput(inputId = "species", label = "Species:", 
         selected = c("COD", "HAD", "POK", "WHG"),
@@ -62,10 +52,10 @@ ui <- fluidPage(
       
       selectInput(inputId = "pal", label = "Palette:", 
         selected = "spectral",
-        choices = c("spectral", "set1", "set2", "set3"),
+        choices = c("spectral", "paired", "cols25", "set1", "set2", "set3"),
         multiple = FALSE),
       
-      checkboxInput(inputId = "sc", label = "Proportional", value = TRUE),
+      checkboxInput(inputId = "sc", label = "Scaled landings", value = TRUE),
       
       # downloadLink("downloadMap", "Download Map")
       downloadButton("downloadMap", "Download Map")
@@ -86,6 +76,8 @@ server <- function(input, output) {
     
     lutPal <- rbind(
       data.frame(pal = "spectral", fun = "brewer.spectral"),
+      data.frame(pal = "paired", fun = "brewer.paired"),
+      data.frame(pal = "cols25", fun = "cols25"),
       data.frame(pal = "set1", fun = "brewer.set1"),
       data.frame(pal = "set2", fun = "brewer.set2"),
       data.frame(pal = "set3", fun = "brewer.set3")
@@ -97,8 +89,8 @@ server <- function(input, output) {
     
     dfsub <- subset(data, species %in% input$species & 
       gear_type %in% input$gear_type &
-      # mesh_size_min >= input$mesh_range[1] &
-      # mesh_size_max <= input$mesh_range[2] &
+      mesh_size_min >= input$mesh_range[1] &
+      mesh_size_max <= input$mesh_range[2] &
       year >= input$year_range[1] &
       year <= input$year_range[2])
     
@@ -119,7 +111,7 @@ server <- function(input, output) {
   
   # map
   plot_map <- reactive({
-    
+    op <- par(cex = 1.5)
     data2 <- filtered_data()
     plot(1, xlim = c(-6,15), ylim = c(51,62), 
       t = "n", asp = 2, xlab = "", ylab = "")
@@ -141,6 +133,8 @@ server <- function(input, output) {
     uSppCol <- unique(data2[,c("species", "col")])
     uSppCol <- uSppCol[order(uSppCol$species),]
     legend("topright", legend = uSppCol$species, col = uSppCol$col, fill = uSppCol$col)
+    
+    par(op)
     
     recordPlot()
     
