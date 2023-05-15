@@ -13,6 +13,12 @@ library(mapplots)
 library(maps)
 library(mapdata)
 library(pals)
+library(leaflet)
+library(sf)
+library(shinyjs)
+
+source("utilities_load_ecoregion_shp.r")
+source("utilities_ecoregion_mapping.r")
 
 # Load data
 load("data.Rdata")
@@ -32,6 +38,20 @@ ui <- fluidPage(
   # Sidebar with filters
   sidebarLayout(
     sidebarPanel(
+      leafletOutput("map_ecoregion"),
+
+      selectizeInput(
+        inputId = "selected_locations",
+        label = "ICES Ecoregions",
+        choices = sort(shape_eco$Ecoregion),
+        selected = "Greater North Sea",
+        multiple = FALSE,
+        width = "100%",
+        options = list(
+          placeholder = "Select Ecoregion(s)"
+        )
+      ),
+      
       sliderInput("year_range", "Year range:", step = 1, sep = "",
         min = min(data$year), max = max(data$year),
         value = c(max(data$year)-3, max(data$year))),
@@ -69,8 +89,8 @@ ui <- fluidPage(
 )
 
 # Define server logic
-server <- function(input, output) {
-  
+server <- function(input, output,session) {
+  map_panel_server(input, output, session)
   # Filter data based on input values
   filtered_data <- reactive({
     
