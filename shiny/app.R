@@ -16,6 +16,8 @@ library(pals)
 library(leaflet)
 library(sf)
 library(shinyjs)
+library(reshape2)
+
 
 source("utilities_load_ecoregion_shp.r")
 source("utilities_ecoregion_mapping.r")
@@ -84,6 +86,8 @@ ui <- fluidPage(
     # Main panel with map
     mainPanel(
       plotOutput("map"),
+      br(),
+      plotOutput("corr")
     )
   )
 )
@@ -159,13 +163,36 @@ server <- function(input, output,session) {
     # recordPlot()
     
   })
+
+   plot_corr <- reactive({
+   
+    data2 <- filtered_data()
+    data3 <- dcast(data = data2, formula = icesname ~ species, 
+      value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
+    rownames(data3) <- data3$icesname
+    corrTab <- cor(as.matrix(data3[,-1]))
+    
+    op <- par(cex = 1.5)
+    imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
+    
+    par(op)
+    
+    # recordPlot()
+    
+  })
   
   
   # Render map
   output$map <- renderPlot({
     # replayPlot(req(plot_map()))
     plot_map()
-  }, height = 800, width = 650)
+  })
+
+  output$corr <- renderPlot({
+      # replayPlot(req(plot_map()))
+      plot_corr()
+    })
+  
   
   output$downloadMap <- downloadHandler(
     filename = function(){"output.png"},
