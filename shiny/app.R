@@ -22,6 +22,11 @@ source("imageDimnames.r")
 source("utilities_load_ecoregion_shp.r")
 source("utilities_ecoregion_mapping.r")
 
+
+# load function -----------------------------------------------------------
+source("imageDimnames.R")
+
+
 # Load data
 load("data.Rdata")
 
@@ -102,9 +107,24 @@ ui <- fluidPage(
     # Main panel with map
     mainPanel(
       plotOutput("map", height = 800, width = 600),
-      
       plotOutput("corr", height = 400, width = 600)
     )
+    
+    
+    # mainPanel( 
+    #   column( 
+    #     plotOutput("map", inline = TRUE), 
+    #     br(), 
+    #     plotOutput("map", inline = TRUE)
+    #   )
+    # )
+    # mainPanel( tabsetPanel( tabPanel(plotOutput("map")), tabPanel(plotOutput("corr"))))
+    # mainPanel(
+    #   fluidRow(
+    #     column(width = 2, plotOutput("map")),
+    #     column(width = 2, plotOutput("corr"))
+    #   )
+
   )
 )
 
@@ -152,8 +172,12 @@ server <- function(input, output,session) {
   
   # map
   plot_map <- reactive({
+
     op <- par(cex = 1.5, mar = c(4,4,1,1))
+
     data2 <- filtered_data()
+    
+    op <- par(cex = 1.5)
     plot(1, xlim = c(-6,15), ylim = c(51,62), 
       t = "n", asp = 2, xlab = "", ylab = "")
     # map("world", xlim = range(agg$lon), ylim = range(agg$lat))
@@ -174,6 +198,23 @@ server <- function(input, output,session) {
     uSppCol <- unique(data2[,c("species", "col")])
     uSppCol <- uSppCol[order(uSppCol$species),]
     legend("topright", legend = uSppCol$species, col = uSppCol$col, fill = uSppCol$col)
+    par(op)
+    dev.off()
+    recordPlot()
+    
+  })
+  
+  
+  plot_corr <- reactive({
+   
+    data2 <- filtered_data()
+    data3 <- dcast(data = data2, formula = icesname ~ species, 
+      value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
+    rownames(data3) <- data3$icesname
+    corrTab <- cor(as.matrix(data3[,-1]))
+    
+    op <- par(cex = 1.5)
+    imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
     
     par(op)
     
@@ -210,6 +251,11 @@ server <- function(input, output,session) {
       plot_corr()
     })
   
+  
+  # render corr plot
+  output$corr <- renderPlot({
+    replayPlot(req(plot_corr()))
+  }, height = 400, width = 400)
   
   output$downloadMap <- downloadHandler(
     filename = function(){"output.png"},
