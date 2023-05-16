@@ -235,7 +235,7 @@ server <- function(input, output,session) {
     
     par(op)
     
-    # recordPlot()
+    recordPlot()
     
   })
   
@@ -245,17 +245,18 @@ server <- function(input, output,session) {
     replayPlot(req(plot_map()))
     # plot_map()
   })
-
+  
+  # Render corr plot
   output$corr <- renderPlot({
       # replayPlot(req(plot_map()))
       plot_corr()
     })
   
   
-  # render corr plot
-  output$corr <- renderPlot({
-    replayPlot(req(plot_corr()))
-  }, height = 400, width = 400)
+  
+  # output$corr <- renderPlot({
+  #   replayPlot(req(plot_corr()))
+  # }, height = 400, width = 400)
   
   output$downloadMap <- downloadHandler(
     filename = function(){"output.png"},
