@@ -28,7 +28,8 @@ source("imageDimnames.R")
 
 
 # Load data
-load("data.Rdata")
+# load("data.Rdata")
+load("Data/fdi_ecoregion/Greater North Sea_data.Rdata")
 
 # extract mesh size ranges
 mesh_size_split <- strsplit(data$mesh_size_range, "D")
