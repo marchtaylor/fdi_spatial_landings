@@ -101,9 +101,9 @@ ui <- fluidPage(
     ),
     # Main panel with map
     mainPanel(
-      plotOutput("map"),
+      plotOutput("map", height = 800),
       
-      plotOutput("corr")
+      plotOutput("corr", height = 400)
     )
   )
 )
@@ -177,7 +177,7 @@ server <- function(input, output,session) {
     
     par(op)
     
-    # recordPlot()
+    recordPlot()
     
   })
 
@@ -201,8 +201,8 @@ server <- function(input, output,session) {
   
   # Render map
   output$map <- renderPlot({
-    # replayPlot(req(plot_map()))
-    plot_map()
+    replayPlot(req(plot_map()))
+    # plot_map()
   })
 
   output$corr <- renderPlot({
@@ -215,7 +215,7 @@ server <- function(input, output,session) {
     filename = function(){"output.png"},
     content = function(file){
       png(file, height = 800, width = 650)
-        # replayPlot(plot_map())
+        replayPlot(plot_map())
       dev.off()
     }
   )
