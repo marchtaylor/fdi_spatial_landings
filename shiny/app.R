@@ -18,13 +18,14 @@ library(sf)
 library(shinyjs)
 library(reshape2)
 
-source("imageDimnames.r")
-source("utilities_load_ecoregion_shp.r")
-source("utilities_ecoregion_mapping.r")
+
+
 
 
 # load function -----------------------------------------------------------
 source("imageDimnames.R")
+source("utilities_load_ecoregion_shp.r")
+source("utilities_ecoregion_mapping.r")
 
 
 # Load data
@@ -176,7 +177,7 @@ server <- function(input, output,session) {
     op <- par(cex = 1.5, mar = c(4,4,1,1))
 
     data2 <- filtered_data()
-    
+    # write.table(data2, file = "test_data.csv")
     op <- par(cex = 1.5)
     plot(1, xlim = c(-6,15), ylim = c(51,62), 
       t = "n", asp = 2, xlab = "", ylab = "")
@@ -199,28 +200,31 @@ server <- function(input, output,session) {
     uSppCol <- uSppCol[order(uSppCol$species),]
     legend("topright", legend = uSppCol$species, col = uSppCol$col, fill = uSppCol$col)
     par(op)
-    dev.off()
-    recordPlot()
+    print(head(aggsub))
+    write.table(aggsub, file = "test_data.csv")
+    print(sc)
+    
+    # recordPlot()
     
   })
   
   
-  plot_corr <- reactive({
+  # plot_corr <- reactive({
    
-    data2 <- filtered_data()
-    data3 <- dcast(data = data2, formula = icesname ~ species, 
-      value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
-    rownames(data3) <- data3$icesname
-    corrTab <- cor(as.matrix(data3[,-1]))
+  #   data2 <- filtered_data()
+  #   data3 <- dcast(data = data2, formula = icesname ~ species, 
+  #     value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
+  #   rownames(data3) <- data3$icesname
+  #   corrTab <- cor(as.matrix(data3[,-1]))
     
-    op <- par(cex = 1.5)
-    imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
+  #   op <- par(cex = 1.5)
+  #   imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
     
-    par(op)
+  #   par(op)
     
-    recordPlot()
+  #   recordPlot()
     
-  })
+  # })
 
    plot_corr <- reactive({
    
@@ -235,15 +239,15 @@ server <- function(input, output,session) {
     
     par(op)
     
-    recordPlot()
+    # recordPlot()
     
   })
   
   
   # Render map
   output$map <- renderPlot({
-    replayPlot(req(plot_map()))
-    # plot_map()
+    # replayPlot(req(plot_map()))
+    plot_map()
   })
   
   # Render corr plot
@@ -262,8 +266,8 @@ server <- function(input, output,session) {
     filename = function(){"output.png"},
     content = function(file){
       png(file, height = 800, width = 650)
-        replayPlot(plot_map())
-      dev.off()
+        # replayPlot(plot_map())
+      
     }
   )
 
