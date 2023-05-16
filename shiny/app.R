@@ -85,9 +85,9 @@ ui <- fluidPage(
     ),
     # Main panel with map
     mainPanel(
-      plotOutput("map"),
+      plotOutput("map", height = 800),
       
-      plotOutput("corr")
+      plotOutput("corr", height = 400)
     )
   )
 )
