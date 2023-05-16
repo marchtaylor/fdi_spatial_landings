@@ -58,6 +58,21 @@ ui <- fluidPage(
         min = min(data$year), max = max(data$year),
         value = c(max(data$year)-3, max(data$year))),
       
+      
+      selectInput(inputId = "vessel_length", label = "Vessel Length:",
+                  selected = c("VL1218", "VL1824"),
+                  choices = list("0-12m" = "VL0010",
+                                 "10-12m" = "VL1012",
+                                 "12-18m" = "VL1218",
+                                 "18-24m" = "VL1824",
+                                 "24-40m" = "VL2440",
+                                 "40m+" = "VL40XX",
+                                 "Not known" = "NK"
+                                 ),
+                  
+                  multiple = TRUE),
+      
+      
       selectInput(inputId = "gear_type", label = "Gear type:",
         selected = c("OTB", "OTM"),
         choices = sort(unique(data$gear_type)),
@@ -71,6 +86,7 @@ ui <- fluidPage(
         selected = c("COD", "HAD", "POK", "WHG"),
         choices = sort(unique(data$species)),
         multiple = TRUE),
+      
       
       selectInput(inputId = "pal", label = "Palette:", 
         selected = "spectral",
@@ -113,6 +129,7 @@ server <- function(input, output,session) {
     
     dfsub <- subset(data, species %in% input$species & 
       gear_type %in% input$gear_type &
+      vessel_length %in% input$vessel_length &  
       mesh_size_min >= input$mesh_range[1] &
       mesh_size_max <= input$mesh_range[2] &
       year >= input$year_range[1] &
