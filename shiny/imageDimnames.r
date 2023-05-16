@@ -37,8 +37,13 @@ imageDimnames <- function(mat,
   xlab = NULL, ylab = NULL, xaxisSide = 1, yaxisSide = 2,
   axisLas = 1,
   drawBorders = TRUE, borderCol = 1, borderLty = 1, borderLwd = 1,
-  addLabels = TRUE, labels = sinkr::ac(c(mat)), labelCol = "black", labelFont = 1,
+  addLabels = TRUE, labels = ac(c(mat)), labelCol = "black", labelFont = 1,
   ...){
+  
+  ac <- function(x, ...){
+    as.character(x, ...)
+  }
+  
   if(is.null(dimnames(mat))){
     dimnames(mat) <- list(seq(nrow(mat)), seq(ncol(mat)))
   }
