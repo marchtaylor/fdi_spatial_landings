@@ -18,7 +18,7 @@ library(sf)
 library(shinyjs)
 library(reshape2)
 
-
+source("imageDimnames.r")
 source("utilities_load_ecoregion_shp.r")
 source("utilities_ecoregion_mapping.r")
 
@@ -86,7 +86,7 @@ ui <- fluidPage(
     # Main panel with map
     mainPanel(
       plotOutput("map"),
-      br(),
+      
       plotOutput("corr")
     )
   )

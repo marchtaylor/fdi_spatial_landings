@@ -49,6 +49,6 @@ po/*~
 rsconnect/
 
 # raw FDI data folder
-data/
+#data/
 
 *html
