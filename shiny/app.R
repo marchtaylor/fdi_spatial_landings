@@ -13,6 +13,14 @@ library(mapplots)
 library(maps)
 library(mapdata)
 library(pals)
+library(leaflet)
+library(sf)
+library(shinyjs)
+library(reshape2)
+
+source("imageDimnames.r")
+source("utilities_load_ecoregion_shp.r")
+source("utilities_ecoregion_mapping.r")
 
 
 # load function -----------------------------------------------------------
@@ -37,9 +45,38 @@ ui <- fluidPage(
   # Sidebar with filters
   sidebarLayout(
     sidebarPanel(
+      leafletOutput("map_ecoregion"),
+
+      selectizeInput(
+        inputId = "selected_locations",
+        label = "ICES Ecoregions",
+        choices = sort(shape_eco$Ecoregion),
+        selected = "Greater North Sea",
+        multiple = FALSE,
+        width = "100%",
+        options = list(
+          placeholder = "Select Ecoregion(s)"
+        )
+      ),
+
       sliderInput("year_range", "Year range:", step = 1, sep = "",
         min = min(data$year), max = max(data$year),
         value = c(max(data$year)-3, max(data$year))),
+      
+      
+      selectInput(inputId = "vessel_length", label = "Vessel Length:",
+                  selected = c("VL1218", "VL1824"),
+                  choices = list("0-12m" = "VL0010",
+                                 "10-12m" = "VL1012",
+                                 "12-18m" = "VL1218",
+                                 "18-24m" = "VL1824",
+                                 "24-40m" = "VL2440",
+                                 "40m+" = "VL40XX",
+                                 "Not known" = "NK"
+                                 ),
+                  
+                  multiple = TRUE),
+      
       
       selectInput(inputId = "gear_type", label = "Gear type:",
         selected = c("OTB", "OTM"),
@@ -55,6 +92,7 @@ ui <- fluidPage(
         choices = sort(unique(data$species)),
         multiple = TRUE),
       
+      
       selectInput(inputId = "pal", label = "Palette:", 
         selected = "spectral",
         choices = c("spectral", "paired", "cols25", "set1", "set2", "set3"),
@@ -68,11 +106,8 @@ ui <- fluidPage(
     ),
     # Main panel with map
     mainPanel(
-      fluidRow(
-        plotOutput("map"),
-        hr(),
-        plotOutput("corr")
-      )
+      plotOutput("map", height = 800, width = 600),
+      plotOutput("corr", height = 400, width = 600)
     )
     
     
@@ -94,8 +129,8 @@ ui <- fluidPage(
 )
 
 # Define server logic
-server <- function(input, output) {
-  
+server <- function(input, output,session) {
+  map_panel_server(input, output, session)
   # Filter data based on input values
   filtered_data <- reactive({
     
@@ -114,6 +149,7 @@ server <- function(input, output) {
     
     dfsub <- subset(data, species %in% input$species & 
       gear_type %in% input$gear_type &
+      vessel_length %in% input$vessel_length &  
       mesh_size_min >= input$mesh_range[1] &
       mesh_size_max <= input$mesh_range[2] &
       year >= input$year_range[1] &
@@ -136,7 +172,9 @@ server <- function(input, output) {
   
   # map
   plot_map <- reactive({
-    
+
+    op <- par(cex = 1.5, mar = c(4,4,1,1))
+
     data2 <- filtered_data()
     
     op <- par(cex = 1.5)
@@ -183,13 +221,36 @@ server <- function(input, output) {
     recordPlot()
     
   })
+
+   plot_corr <- reactive({
+   
+    data2 <- filtered_data()
+    data3 <- dcast(data = data2, formula = icesname ~ species, 
+      value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
+    rownames(data3) <- data3$icesname
+    corrTab <- cor(as.matrix(data3[,-1]))
+    
+    op <- par(cex = 1.5, mar = c(4,4,1,1))
+    imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
+    
+    par(op)
+    
+    # recordPlot()
+    
+  })
   
   
   # Render map
   output$map <- renderPlot({
     replayPlot(req(plot_map()))
     # plot_map()
-  }, height = 800, width = 650)
+  })
+
+  output$corr <- renderPlot({
+      # replayPlot(req(plot_map()))
+      plot_corr()
+    })
+  
   
   # render corr plot
   output$corr <- renderPlot({
