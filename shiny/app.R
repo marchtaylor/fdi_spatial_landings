@@ -85,9 +85,9 @@ ui <- fluidPage(
     ),
     # Main panel with map
     mainPanel(
-      plotOutput("map", height = 800),
+      plotOutput("map", height = 800, width = 600),
       
-      plotOutput("corr", height = 400)
+      plotOutput("corr", height = 400, width = 600)
     )
   )
 )
@@ -135,7 +135,7 @@ server <- function(input, output,session) {
   
   # map
   plot_map <- reactive({
-    op <- par(cex = 1.5)
+    op <- par(cex = 1.5, mar = c(4,4,1,1))
     data2 <- filtered_data()
     plot(1, xlim = c(-6,15), ylim = c(51,62), 
       t = "n", asp = 2, xlab = "", ylab = "")
@@ -172,7 +172,7 @@ server <- function(input, output,session) {
     rownames(data3) <- data3$icesname
     corrTab <- cor(as.matrix(data3[,-1]))
     
-    op <- par(cex = 1.5)
+    op <- par(cex = 1.5, mar = c(4,4,1,1))
     imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
     
     par(op)
