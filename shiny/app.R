@@ -51,7 +51,7 @@ ui <- fluidPage(
           placeholder = "Select Ecoregion(s)"
         )
       ),
-      
+
       sliderInput("year_range", "Year range:", step = 1, sep = "",
         min = min(data$year), max = max(data$year),
         value = c(max(data$year)-3, max(data$year))),
@@ -156,22 +156,22 @@ server <- function(input, output,session) {
     
     par(op)
     
-    recordPlot()
+    # recordPlot()
     
   })
   
   
   # Render map
   output$map <- renderPlot({
-    replayPlot(req(plot_map()))
-    # plot_map()
+    # replayPlot(req(plot_map()))
+    plot_map()
   }, height = 800, width = 650)
   
   output$downloadMap <- downloadHandler(
     filename = function(){"output.png"},
     content = function(file){
       png(file, height = 800, width = 650)
-        replayPlot(plot_map())
+        # replayPlot(plot_map())
       dev.off()
     }
   )
