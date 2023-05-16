@@ -24,7 +24,7 @@ source("utilities_ecoregion_mapping.r")
 
 
 # load function -----------------------------------------------------------
-source("imageDimnames.R")
+source("imageDimnames.r")
 
 
 # Load data
@@ -200,7 +200,7 @@ server <- function(input, output,session) {
     uSppCol <- uSppCol[order(uSppCol$species),]
     legend("topright", legend = uSppCol$species, col = uSppCol$col, fill = uSppCol$col)
     par(op)
-    dev.off()
+    # dev.off()
     recordPlot()
     
   })
