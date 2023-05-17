@@ -87,7 +87,8 @@ map_panel_server <- function(input, output, session) {
   # Render Map 1
   output$map_ecoregion <- renderLeaflet({
     map_ecoregion(shape_eco, eu_shape)
-  }) # END RENDER LEAFLET map1
+  })  %>% bindCache(shape_eco, eu_shape)
+  # END RENDER LEAFLET map1
   
   proxy_1 <- leafletProxy("map_ecoregion")
   

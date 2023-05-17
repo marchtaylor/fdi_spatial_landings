@@ -17,28 +17,19 @@ library(leaflet)
 library(sf)
 library(shinyjs)
 library(reshape2)
+library(data.table)
 
-source("imageDimnames.r")
-source("utilities_load_ecoregion_shp.r")
-source("utilities_ecoregion_mapping.r")
+
+
 
 
 # load function -----------------------------------------------------------
 source("imageDimnames.r")
+source("utilities_load_ecoregion_shp.r")
+source("utilities_ecoregion_mapping.r")
+source("mesh_size_extractor.r")
 
 
-# Load data
-# load("data.Rdata")
-load("Data/fdi_ecoregion/Greater North Sea_data.Rdata")
-
-# extract mesh size ranges
-mesh_size_split <- strsplit(data$mesh_size_range, "D")
-mesh_sizes <- suppressWarnings(as.numeric(do.call("c", mesh_size_split)))
-mesh_size_range <- range(unique(mesh_sizes), na.rm = TRUE)
-mesh_size_split <- lapply(mesh_size_split, FUN = function(x){if(length(x)<2){c(mesh_size_range)}else{x}})
-mesh_size_split <- lapply(mesh_size_split, FUN = function(x){if(x[2]=="XX"){c(x[1], mesh_size_range[2])}else{x}})
-data$mesh_size_min <- as.numeric(unlist(lapply(mesh_size_split, FUN = function(x){x[1]})))
-data$mesh_size_max <- as.numeric(unlist(lapply(mesh_size_split, FUN = function(x){x[2]})))
   
 
 # Define UI
@@ -60,9 +51,14 @@ ui <- fluidPage(
         )
       ),
 
-      sliderInput("year_range", "Year range:", step = 1, sep = "",
-        min = min(data$year), max = max(data$year),
-        value = c(max(data$year)-3, max(data$year))),
+      sliderInput(inputId = "year_range", 
+        label = "Year range:", 
+        step = 1, 
+        sep = "",
+        min = 2013, 
+        max = 2021,
+        value = c(2018, 2021)
+        ),
       
       
       selectInput(inputId = "vessel_length", label = "Vessel Length:",
@@ -81,7 +77,8 @@ ui <- fluidPage(
       
       selectInput(inputId = "gear_type", label = "Gear type:",
         selected = c("OTB", "OTM"),
-        choices = sort(unique(data$gear_type)),
+        choices = sort(c("DRB", "OTB", "GTR", "GNS", "FPO" ,"OTM", "LHP" ,"LTL", "TBB" ,"LLS", "SSC", "PTM","SDN", "PS" , "HMD",
+         "OTT", "LHM" ,"LLD", "GTN", "GND", "PTB", "SB",  "FYK" ,"FPN", "GNC" ,"SV" , "DRH", "SPR")),        
         multiple = TRUE),
       
       sliderInput("mesh_range", "Mesh range [mm]:", step = 10, sep = "",
@@ -90,7 +87,7 @@ ui <- fluidPage(
       
       selectInput(inputId = "species", label = "Species:", 
         selected = c("COD", "HAD", "POK", "WHG"),
-        choices = sort(unique(data$species)),
+        choices = sort(c("SCE", "PLE", "SOL", "WHG", "CSH", "MAC" ,"COD", "HER", "CRE" ,"POK", "WHE", "SAN", "MUS", "PIL", "HAD" ,"SPR" ,"NEP", "NOP" ,"LQD" ,"LAH")),
         multiple = TRUE),
       
       
@@ -133,7 +130,24 @@ ui <- fluidPage(
 server <- function(input, output,session) {
   map_panel_server(input, output, session)
   # Filter data based on input values
+  # Load data
+  # load("data.Rdata")
+
+  
+  
   filtered_data <- reactive({
+
+    req(input$selected_locations)
+
+    filename <- paste0("Data/fdi_ecoregion/", input$selected_locations, "_data.Rdata")
+    # filename <- paste0("Data/fdi_ecoregion/", input$selected_locations, "_data.csv")
+    
+    # data <- fread(filename)
+    load(filename)
+
+
+    # extract mesh size ranges
+    data <- mesh_size_extractor(data)
     
     lutPal <- rbind(
       data.frame(pal = "spectral", fun = "brewer.spectral"),
@@ -144,7 +158,7 @@ server <- function(input, output,session) {
       data.frame(pal = "set3", fun = "brewer.set3")
     )
     
-    lutCol <- data.frame(species = sort(unique(data[,c("species")])))
+    lutCol <- data.frame(species = sort(unique(data$species)))
     lutCol$col <- do.call(lutPal$fun[match(input$pal, lutPal$pal)], 
       args = list(n = length(lutCol$species)))
     
@@ -209,7 +223,7 @@ server <- function(input, output,session) {
   plot_corr <- reactive({
    
     data2 <- filtered_data()
-    data3 <- dcast(data = data2, formula = icesname ~ species, 
+    data3 <- maditr::dcast(data = data2, formula = icesname ~ species, 
       value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
     rownames(data3) <- data3$icesname
     corrTab <- cor(as.matrix(data3[,-1]))
@@ -223,23 +237,6 @@ server <- function(input, output,session) {
     
   })
 
-   plot_corr <- reactive({
-   
-    data2 <- filtered_data()
-    data3 <- dcast(data = data2, formula = icesname ~ species, 
-      value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
-    rownames(data3) <- data3$icesname
-    corrTab <- cor(as.matrix(data3[,-1]))
-    
-    op <- par(cex = 1.5, mar = c(4,4,1,1))
-    imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
-    
-    par(op)
-    
-    recordPlot()
-    
-  })
-  
   
   # Render map
   output$map <- renderPlot({
