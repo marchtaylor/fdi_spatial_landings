@@ -17,8 +17,10 @@ library(leaflet)
 library(sf)
 library(shinyjs)
 library(reshape2)
+library(psych)
 
 source("imageDimnames.r")
+source("plotCor.r")
 source("utilities_load_ecoregion_shp.r")
 source("utilities_ecoregion_mapping.r")
 
@@ -45,7 +47,7 @@ data$mesh_size_max <- as.numeric(unlist(lapply(mesh_size_split, FUN = function(x
 ui <- fluidPage(
   # Sidebar with filters
   sidebarLayout(
-    sidebarPanel(
+    sidebarPanel(width = 3,
       leafletOutput("map_ecoregion"),
 
       selectizeInput(
@@ -96,7 +98,9 @@ ui <- fluidPage(
       
       selectInput(inputId = "pal", label = "Palette:", 
         selected = "spectral",
-        choices = c("spectral", "paired", "cols25", "set1", "set2", "set3"),
+        choices = c("spectral", "paired", "cols25", 
+          "set1", "set2", "set3", 
+          "alphabet", "alphabet2", "polychrome", "glasbey"),
         multiple = FALSE),
       
       checkboxInput(inputId = "sc", label = "Scaled landings", value = TRUE),
@@ -105,49 +109,52 @@ ui <- fluidPage(
       downloadButton("downloadMap", "Download Map")
       
     ),
-    # Main panel with map
-    mainPanel(
-      plotOutput("map", height = 800, width = 600),
-      plotOutput("corr", height = 400, width = 600)
+
+    mainPanel(width = 9,
+      fluidRow(
+        column(5, plotOutput("map_species", width = "100%", height = 600)),
+        column(5, plotOutput("map_gear_type", width = "100%", height = 600))
+      ),
+      fluidRow(
+        column(5, plotOutput("corr_species", width = "100%", height = 400)),
+        column(5, plotOutput("corr_gear_type", width = "100%", height = 400))
+      )
     )
+        
     
     
-    # mainPanel( 
-    #   column( 
-    #     plotOutput("map", inline = TRUE), 
-    #     br(), 
-    #     plotOutput("map", inline = TRUE)
-    #   )
-    # )
-    # mainPanel( tabsetPanel( tabPanel(plotOutput("map")), tabPanel(plotOutput("corr"))))
+    # # Main panel with map
     # mainPanel(
-    #   fluidRow(
-    #     column(width = 2, plotOutput("map")),
-    #     column(width = 2, plotOutput("corr"))
-    #   )
+    #   plotOutput("map_species", height = 800, width = 600),
+    #   plotOutput("corr_species", height = 400, width = 600)
+    # )
+    
+
 
   )
 )
 
 # Define server logic
-server <- function(input, output,session) {
+server <- function(input, output, session) {
   map_panel_server(input, output, session)
-  # Filter data based on input values
+
+  ## DATA PREPARATION ----  
+  # color palette look-up ----
+  lutPal <- rbind(
+    data.frame(pal = "spectral", fun = "brewer.spectral"),
+    data.frame(pal = "paired", fun = "brewer.paired"),
+    data.frame(pal = "cols25", fun = "cols25"),
+    data.frame(pal = "set1", fun = "brewer.set1"),
+    data.frame(pal = "set2", fun = "brewer.set2"),
+    data.frame(pal = "set3", fun = "brewer.set3"),
+    data.frame(pal = "alphabet", fun = "alphabet"),
+    data.frame(pal = "alphabet2", fun = "alphabet2"),
+    data.frame(pal = "polychrome", fun = "polychrome"),
+    data.frame(pal = "glasbey", fun = "glasbey")
+  )
+  
+  # filter data ----
   filtered_data <- reactive({
-    
-    lutPal <- rbind(
-      data.frame(pal = "spectral", fun = "brewer.spectral"),
-      data.frame(pal = "paired", fun = "brewer.paired"),
-      data.frame(pal = "cols25", fun = "cols25"),
-      data.frame(pal = "set1", fun = "brewer.set1"),
-      data.frame(pal = "set2", fun = "brewer.set2"),
-      data.frame(pal = "set3", fun = "brewer.set3")
-    )
-    
-    lutCol <- data.frame(species = sort(unique(data[,c("species")])))
-    lutCol$col <- do.call(lutPal$fun[match(input$pal, lutPal$pal)], 
-      args = list(n = length(lutCol$species)))
-    
     dfsub <- subset(data, species %in% input$species & 
       gear_type %in% input$gear_type &
       vessel_length %in% input$vessel_length &  
@@ -155,6 +162,16 @@ server <- function(input, output,session) {
       mesh_size_max <= input$mesh_range[2] &
       year >= input$year_range[1] &
       year <= input$year_range[2])
+    dfsub
+  })
+  
+  # species aggregation ----
+  filtered_data_species <- reactive({
+    
+    dfsub <- filtered_data()
+    lutCol <- data.frame(species = sort(unique(data$species)))
+    lutCol$col <- do.call(lutPal$fun[match(input$pal, lutPal$pal)],
+      args = list(n = length(lutCol$species)))
     
     agg1 <- aggregate(totwghtlandg ~ icesname + species, data = dfsub, FUN = sum, na.rm = T)
     names(agg1)[3] <- "landings"
@@ -171,12 +188,37 @@ server <- function(input, output,session) {
     agg
   })
   
-  # map
-  plot_map <- reactive({
+  # gear type aggregation ----
+  filtered_data_gear_type <- reactive({
+    
+    dfsub <- filtered_data()
+    
+    lutCol <- data.frame(gear_type = sort(unique(data$gear_type)))
+    lutCol$col <- do.call(lutPal$fun[match(input$pal, lutPal$pal)],
+      args = list(n = length(lutCol$gear_type)))
+    
+    agg1 <- aggregate(totwghtlandg ~ icesname + gear_type, data = dfsub, FUN = sum, na.rm = T)
+    names(agg1)[3] <- "landings"
+    agg1 <- subset(agg1, landings > 0) # remove zero landings
+    agg2 <- aggregate(landings ~ icesname, data = agg1, FUN = sum, na.rm = T)
+    names(agg2)[2] <- "sumLandings"
+    
+    agg <- merge(agg1, agg2, all.x = T)
+    agg$percLandings <- agg$landings / agg$sumLandings
+    agg$sc <- sqrt(agg$sumLandings/max(agg$sumLandings, na.rm = T))
+    agg <- cbind(agg, ices.rect(rectangle = agg$icesname))
+    agg$col <- lutCol$col[match(agg$gear_type, lutCol$gear_type)]
 
-    op <- par(cex = 1.5, mar = c(4,4,1,1))
+    agg
+  })
+  
+  ## PLOTS ----  
+  # map species ----
+  plot_map_species <- reactive({
 
-    data2 <- filtered_data()
+    op <- par(cex = 1.5, mar = c(2,2,1,1))
+
+    data2 <- filtered_data_species()
     
     op <- par(cex = 1.5)
     plot(1, xlim = c(-6,15), ylim = c(51,62), 
@@ -200,58 +242,110 @@ server <- function(input, output,session) {
     uSppCol <- uSppCol[order(uSppCol$species),]
     legend("topright", legend = uSppCol$species, col = uSppCol$col, fill = uSppCol$col)
     par(op)
-    # dev.off()
+
     recordPlot()
     
   })
   
+  # map gear type ----
+  plot_map_gear_type <- reactive({
+    
+
+    data2 <- filtered_data_gear_type()
+    
+    op <- par(cex = 1.5, mar = c(2,2,1,1))
+    plot(1, xlim = c(-6,15), ylim = c(51,62), 
+      t = "n", asp = 2, xlab = "", ylab = "")
+    # map("world", xlim = range(agg$lon), ylim = range(agg$lat))
+    urect <- unique(data2$icesname)
+    for(i in seq(urect)){
+      aggsub <- subset(data2, icesname == urect[i])
+      sc <- ifelse(input$sc, 1, aggsub$sc[1])
+
+      excl <- which(aggsub$percLandings==0)
+      if(length(excl)>0) aggsub <- aggsub[-which(aggsub$percLandings==0)]
+      barplot2D(z = aggsub$percLandings, x = aggsub$lon[1], y = aggsub$lat[1],
+        width = 1*sc, height = 0.5*sc,
+        colour = aggsub$col, border = NA,
+        lwd.frame = 0.25, col.frame = "black")
+    }
+    map("world", add = T, fill = T, col = 8, boundary = 1)
+    box()
+    uGearCol <- unique(data2[,c("gear_type", "col")])
+    uGearCol <- uGearCol[order(uGearCol$gear_type),]
+    legend("topright", legend = uGearCol$gear_type, col = uSppCol$col, fill = uGearCol$col)
+    par(op)
+
+    recordPlot()
+    
+  })
   
-  plot_corr <- reactive({
+  # correlation species ----
+  plot_corr_species <- reactive({
    
-    data2 <- filtered_data()
+    data2 <- filtered_data_species()
     data3 <- dcast(data = data2, formula = icesname ~ species, 
       value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
     rownames(data3) <- data3$icesname
-    corrTab <- cor(as.matrix(data3[,-1]))
+    data3 <- data3[,-1]
+    # corrTab <- cor(as.matrix(data3[,-1]))
     
-    op <- par(cex = 1.5)
-    imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
+    op <- par(cex = 1.5, mar = c(1,1,1,1))
+    # imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
+    # plotCor(data3, log = FALSE)
+    mat <- round(cor(data3, use = "pairwise.complete.obs", method = "pearson"), 2)
+    imageCor(mat)
     
+    par(op)
+    
+    recordPlot()
+    
+  })
+  
+  # correlation gear type ----
+  plot_corr_gear_type <- reactive({
+   
+    data2 <- filtered_data_gear_type()
+    data3 <- dcast(data = data2, formula = icesname ~ gear_type, 
+      value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
+    rownames(data3) <- data3$icesname
+    data3 <- data3[,-1]
+    # corrTab <- cor(as.matrix(data3[,-1]))
+    
+    op <- par(cex = 1.5, mar = c(1,1,1,1))
+    # imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
+    # plotCor(data3, log = FALSE)
+    mat <- round(cor(data3, use = "pairwise.complete.obs", method = "pearson"), 2)
+    imageCor(mat)
     par(op)
     
     recordPlot()
     
   })
 
-   plot_corr <- reactive({
-   
-    data2 <- filtered_data()
-    data3 <- dcast(data = data2, formula = icesname ~ species, 
-      value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
-    rownames(data3) <- data3$icesname
-    corrTab <- cor(as.matrix(data3[,-1]))
-    
-    op <- par(cex = 1.5, mar = c(4,4,1,1))
-    imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
-    
-    par(op)
-    
-    recordPlot()
-    
+  
+  
+  # Render map(s)
+  output$map_species <- renderPlot({
+    replayPlot(req(plot_map_species()))
+    # plot_map()
   })
   
-  
-  # Render map
-  output$map <- renderPlot({
-    replayPlot(req(plot_map()))
+  output$map_gear_type <- renderPlot({
+    replayPlot(req(plot_map_gear_type()))
     # plot_map()
   })
   
   # Render corr plot
-  output$corr <- renderPlot({
-      # replayPlot(req(plot_map()))
-      plot_corr()
-    })
+  output$corr_species <- renderPlot({
+    # replayPlot(req(plot_map()))
+    replayPlot(req(plot_corr_species()))
+  })
+  
+  output$corr_gear_type <- renderPlot({
+    # replayPlot(req(plot_map()))
+    replayPlot(req(plot_corr_gear_type()))
+  })
   
   
   
@@ -263,7 +357,7 @@ server <- function(input, output,session) {
     filename = function(){"output.png"},
     content = function(file){
       png(file, height = 800, width = 650)
-        replayPlot(plot_map())
+        replayPlot(plot_map_species())
       dev.off()
     }
   )
