@@ -51,6 +51,10 @@ ui <- fluidPage(
         )
       ),
 
+      uiOutput("year_range"),
+      
+
+
       sliderInput(inputId = "year_range", 
         label = "Year range:", 
         step = 1, 
@@ -61,7 +65,9 @@ ui <- fluidPage(
         ),
       
       
-      selectInput(inputId = "vessel_length", label = "Vessel Length:",
+      selectInput(
+                  inputId = "vessel_length", 
+                  label = "Vessel Length:",
                   selected = c("VL1218", "VL1824"),
                   choices = list("0-12m" = "VL0010",
                                  "10-12m" = "VL1012",
@@ -75,7 +81,9 @@ ui <- fluidPage(
                   multiple = TRUE),
       
       
-      selectInput(inputId = "gear_type", label = "Gear type:",
+      selectInput(
+        inputId = "gear_type", 
+        label = "Gear type:",
         selected = c("OTB", "OTM"),
         choices = sort(c("DRB", "OTB", "GTR", "GNS", "FPO" ,"OTM", "LHP" ,"LTL", "TBB" ,"LLS", "SSC", "PTM","SDN", "PS" , "HMD",
          "OTT", "LHM" ,"LLD", "GTN", "GND", "PTB", "SB",  "FYK" ,"FPN", "GNC" ,"SV" , "DRH", "SPR")),        
@@ -85,13 +93,17 @@ ui <- fluidPage(
         min = 0, max = 250,
         value = c(0, 250)),
       
-      selectInput(inputId = "species", label = "Species:", 
+      selectInput(
+        inputId = "species",
+        label = "Species:", 
         selected = c("COD", "HAD", "POK", "WHG"),
         choices = sort(c("SCE", "PLE", "SOL", "WHG", "CSH", "MAC" ,"COD", "HER", "CRE" ,"POK", "WHE", "SAN", "MUS", "PIL", "HAD" ,"SPR" ,"NEP", "NOP" ,"LQD" ,"LAH")),
         multiple = TRUE),
       
       
-      selectInput(inputId = "pal", label = "Palette:", 
+      selectInput(
+        inputId = "pal", 
+        label = "Palette:", 
         selected = "spectral",
         choices = c("spectral", "paired", "cols25", "set1", "set2", "set3"),
         multiple = FALSE),
@@ -107,47 +119,52 @@ ui <- fluidPage(
       plotOutput("map", height = 800, width = 600),
       plotOutput("corr", height = 400, width = 600)
     )
-    
-    
-    # mainPanel( 
-    #   column( 
-    #     plotOutput("map", inline = TRUE), 
-    #     br(), 
-    #     plotOutput("map", inline = TRUE)
-    #   )
-    # )
-    # mainPanel( tabsetPanel( tabPanel(plotOutput("map")), tabPanel(plotOutput("corr"))))
-    # mainPanel(
-    #   fluidRow(
-    #     column(width = 2, plotOutput("map")),
-    #     column(width = 2, plotOutput("corr"))
-    #   )
 
   )
 )
 
 # Define server logic
 server <- function(input, output,session) {
+  
+  # Ecoregion interactive map
   map_panel_server(input, output, session)
-  # Filter data based on input values
-  # Load data
-  # load("data.Rdata")
-
   
-  
-  filtered_data <- reactive({
 
-    req(input$selected_locations)
-
+  data_loaded <- eventReactive(req(input$selected_locations),{    
     filename <- paste0("Data/fdi_ecoregion/", input$selected_locations, "_data.Rdata")
     # filename <- paste0("Data/fdi_ecoregion/", input$selected_locations, "_data.csv")
     
     # data <- fread(filename)
     load(filename)
+    mesh_size_extractor(data)
+  })
+
+  # updateSelectInput(
+  #       inputId = "gear_type", 
+  #       label = "Gear type:",
+  #       selected = NULL,
+  #       choices = sort(unique(data_loaded()$gear_type))
+  #       )
+
+  # updateSelectInput(
+  #       inputId = "species", 
+  #       label = "Species:", 
+  #       selected = NULL,
+  #       choices = sort(unique(data_loaded()$species)),
+  #       )
+
+  # Filter data based on input values
+  filtered_data <- eventReactive(req(data_loaded()),{
+
+    # filename <- paste0("Data/fdi_ecoregion/", input$selected_locations, "_data.Rdata")
+    # # filename <- paste0("Data/fdi_ecoregion/", input$selected_locations, "_data.csv")
+    
+    # # data <- fread(filename)
+    # load(filename)
 
 
     # extract mesh size ranges
-    data <- mesh_size_extractor(data)
+    # data <- mesh_size_extractor(data_loaded())
     
     lutPal <- rbind(
       data.frame(pal = "spectral", fun = "brewer.spectral"),
@@ -158,11 +175,11 @@ server <- function(input, output,session) {
       data.frame(pal = "set3", fun = "brewer.set3")
     )
     
-    lutCol <- data.frame(species = sort(unique(data$species)))
+    lutCol <- data.frame(species = sort(unique(data_loaded()$species)))
     lutCol$col <- do.call(lutPal$fun[match(input$pal, lutPal$pal)], 
       args = list(n = length(lutCol$species)))
     
-    dfsub <- subset(data, species %in% input$species & 
+    dfsub <- subset(data_loaded(), species %in% input$species & 
       gear_type %in% input$gear_type &
       vessel_length %in% input$vessel_length &  
       mesh_size_min >= input$mesh_range[1] &
@@ -193,7 +210,7 @@ server <- function(input, output,session) {
     data2 <- filtered_data()
     
     op <- par(cex = 1.5)
-    plot(1, xlim = c(-6,15), ylim = c(51,62), 
+    plot(1, xlim = c(-44,68.5), ylim = c(30,90), 
       t = "n", asp = 2, xlab = "", ylab = "")
     # map("world", xlim = range(agg$lon), ylim = range(agg$lat))
     urect <- unique(data2$icesname)
