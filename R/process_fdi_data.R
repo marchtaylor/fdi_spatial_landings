@@ -38,7 +38,15 @@ for(i in seq(ecoRegions)[-c(1:9)]){ # for each ecoregion
     agg <- aggregate(totwghtlandg ~ species, data = res2, FUN = sum, na.rm = TRUE)
     agg <- agg[order(agg$totwghtlandg, decreasing = TRUE),]
     agg$rank <- seq(nrow(agg))
-    data <- subset(res2, subset = species %in% c(agg$species[seq(20)]))
+    
+    if(i == 9){
+      sppSub <- c("BLL", "COD", "DAB", "GUR", "HAD", "HER", "HKE", "HOM", "LEM", "NEP", "PLE", "POK", 
+        "SAN", "SPR", "SOL", "TUR", "MAC", "WHG", "WIT", "USK")
+    }else{
+      sppSub <- c(agg$species[seq(20)])
+    }
+    
+    data <- subset(res2, subset = species %in% sppSub)
     
     # save ecoregion output
     save(data, file = file.path("shiny/Data/fdi_ecoregion/", paste0(ecoRegions[i], "_data.Rdata")))
