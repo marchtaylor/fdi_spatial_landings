@@ -17,7 +17,7 @@ library(leaflet)
 library(sf)
 library(shinyjs)
 library(reshape2)
-library(psych)
+library(data.table)
 
 source("imageDimnames.r")
 source("plotCor.r")
@@ -41,7 +41,8 @@ mesh_size_split <- lapply(mesh_size_split, FUN = function(x){if(length(x)<2){c(m
 mesh_size_split <- lapply(mesh_size_split, FUN = function(x){if(x[2]=="XX"){c(x[1], mesh_size_range[2])}else{x}})
 data$mesh_size_min <- as.numeric(unlist(lapply(mesh_size_split, FUN = function(x){x[1]})))
 data$mesh_size_max <- as.numeric(unlist(lapply(mesh_size_split, FUN = function(x){x[2]})))
-  
+
+# data <- as.data.table(data)  
 
 # Define UI
 ui <- fluidPage(
@@ -162,33 +163,49 @@ server <- function(input, output, session) {
       mesh_size_max <= input$mesh_range[2] &
       year >= input$year_range[1] &
       year <= input$year_range[2])
+    
+    dfsub <- as.data.table(dfsub)
+    dfsub <- dfsub[, .(landings = sum(totwghtlandg, na.rm = TRUE)), 
+        by = .(icesname, gear_type, year, quarter, species)]
+    dfsub[, landingsSum := sum(landings), by = list(year, species)]
+    dfsub[, landingsPerc := landings/landingsSum]
     dfsub
   })
   
-  # species aggregation ----
+  # species spatial aggregation ----
   filtered_data_species <- reactive({
     
     dfsub <- filtered_data()
+    
     lutCol <- data.frame(species = sort(unique(data$species)))
     lutCol$col <- do.call(lutPal$fun[match(input$pal, lutPal$pal)],
       args = list(n = length(lutCol$species)))
     
-    agg1 <- aggregate(totwghtlandg ~ icesname + species, data = dfsub, FUN = sum, na.rm = T)
-    names(agg1)[3] <- "landings"
-    agg1 <- subset(agg1, landings > 0) # remove zero landings
-    agg2 <- aggregate(landings ~ icesname, data = agg1, FUN = sum, na.rm = T)
-    names(agg2)[2] <- "sumLandings"
+    # aggregate
+    agg <- dfsub[, .(landings = sum(landings, na.rm = TRUE)), 
+      by = .(icesname, species)]
+    agg[, landingsSum := sum(landings), by = .(species)]
+    agg[, landingsPerc := landings/landingsSum]
+
     
-    agg <- merge(agg1, agg2, all.x = T)
-    agg$percLandings <- agg$landings / agg$sumLandings
-    agg$sc <- sqrt(agg$sumLandings/max(agg$sumLandings, na.rm = T))
+    # agg1 <- aggregate(totwghtlandg ~ icesname + species, data = dfsub, FUN = sum, na.rm = T)
+    # names(agg1)[3] <- "landings"
+    # agg1 <- subset(agg1, landings > 0) # remove zero landings
+    # agg2 <- aggregate(landings ~ icesname, data = agg1, FUN = sum, na.rm = T)
+    # names(agg2)[2] <- "sumLandings"
+    # 
+    # agg <- merge(agg1, agg2, all.x = T)
+    # agg$percLandings <- agg$landings / agg$sumLandings
+    
+    
+    agg$sc <- sqrt(agg$landingsSum/max(agg$landingsSum, na.rm = T))
     agg <- cbind(agg, ices.rect(rectangle = agg$icesname))
     agg$col <- lutCol$col[match(agg$species, lutCol$species)]
 
     agg
   })
   
-  # gear type aggregation ----
+  # gear type spatial aggregation ----
   filtered_data_gear_type <- reactive({
     
     dfsub <- filtered_data()
@@ -197,15 +214,22 @@ server <- function(input, output, session) {
     lutCol$col <- do.call(lutPal$fun[match(input$pal, lutPal$pal)],
       args = list(n = length(lutCol$gear_type)))
     
-    agg1 <- aggregate(totwghtlandg ~ icesname + gear_type, data = dfsub, FUN = sum, na.rm = T)
-    names(agg1)[3] <- "landings"
-    agg1 <- subset(agg1, landings > 0) # remove zero landings
-    agg2 <- aggregate(landings ~ icesname, data = agg1, FUN = sum, na.rm = T)
-    names(agg2)[2] <- "sumLandings"
+    # aggregate
+    agg <- dfsub[, .(landings = sum(landings, na.rm = TRUE)), 
+      by = .(icesname, gear_type)]
+    agg[, landingsSum := sum(landings), by = .(gear_type)]
+    agg[, landingsPerc := landings/landingsSum]
     
-    agg <- merge(agg1, agg2, all.x = T)
-    agg$percLandings <- agg$landings / agg$sumLandings
-    agg$sc <- sqrt(agg$sumLandings/max(agg$sumLandings, na.rm = T))
+    # agg1 <- aggregate(totwghtlandg ~ icesname + gear_type, data = dfsub, FUN = sum, na.rm = T)
+    # names(agg1)[3] <- "landings"
+    # agg1 <- subset(agg1, landings > 0) # remove zero landings
+    # agg2 <- aggregate(landings ~ icesname, data = agg1, FUN = sum, na.rm = T)
+    # names(agg2)[2] <- "sumLandings"
+    # 
+    # agg <- merge(agg1, agg2, all.x = T)
+    # agg$percLandings <- agg$landings / agg$sumLandings
+    
+    agg$sc <- sqrt(agg$landingsSum/max(agg$landingsSum, na.rm = T))
     agg <- cbind(agg, ices.rect(rectangle = agg$icesname))
     agg$col <- lutCol$col[match(agg$gear_type, lutCol$gear_type)]
 
@@ -216,7 +240,7 @@ server <- function(input, output, session) {
   # map species ----
   plot_map_species <- reactive({
 
-    op <- par(cex = 1.5, mar = c(2,2,1,1))
+    # op <- par(cex = 1.5, mar = c(2,2,1,1))
 
     data2 <- filtered_data_species()
     
@@ -229,12 +253,14 @@ server <- function(input, output, session) {
       aggsub <- subset(data2, icesname == urect[i])
       sc <- ifelse(input$sc, 1, aggsub$sc[1])
 
-      excl <- which(aggsub$percLandings==0)
-      if(length(excl)>0) aggsub <- aggsub[-which(aggsub$percLandings==0)]
-      barplot2D(z = aggsub$percLandings, x = aggsub$lon[1], y = aggsub$lat[1],
-        width = 1*sc, height = 0.5*sc,
-        colour = aggsub$col, border = NA,
-        lwd.frame = 0.25, col.frame = "black")
+      excl <- which(aggsub$landingsPerc==0)
+      if(length(excl)>0) aggsub <- aggsub[-which(aggsub$landingsPerc==0)]
+      if(nrow(aggsub)>0){
+        barplot2D(z = aggsub$landingsPerc, x = aggsub$lon[1], y = aggsub$lat[1],
+          width = 1*sc, height = 0.5*sc,
+          colour = aggsub$col, border = NA,
+          lwd.frame = 0.25, col.frame = "black")
+      }
     }
     map("world", add = T, fill = T, col = 8, boundary = 1)
     box()
@@ -253,7 +279,7 @@ server <- function(input, output, session) {
 
     data2 <- filtered_data_gear_type()
     
-    op <- par(cex = 1.5, mar = c(2,2,1,1))
+    op <- par(cex = 1.5)
     plot(1, xlim = c(-6,15), ylim = c(51,62), 
       t = "n", asp = 2, xlab = "", ylab = "")
     # map("world", xlim = range(agg$lon), ylim = range(agg$lat))
@@ -262,12 +288,14 @@ server <- function(input, output, session) {
       aggsub <- subset(data2, icesname == urect[i])
       sc <- ifelse(input$sc, 1, aggsub$sc[1])
 
-      excl <- which(aggsub$percLandings==0)
-      if(length(excl)>0) aggsub <- aggsub[-which(aggsub$percLandings==0)]
-      barplot2D(z = aggsub$percLandings, x = aggsub$lon[1], y = aggsub$lat[1],
-        width = 1*sc, height = 0.5*sc,
-        colour = aggsub$col, border = NA,
-        lwd.frame = 0.25, col.frame = "black")
+      excl <- which(aggsub$landingsPerc==0)
+      if(length(excl)>0) aggsub <- aggsub[-which(aggsub$landingsPerc==0)]
+      if(nrow(aggsub)>0){
+        barplot2D(z = aggsub$landingsPerc, x = aggsub$lon[1], y = aggsub$lat[1],
+          width = 1*sc, height = 0.5*sc,
+          colour = aggsub$col, border = NA,
+          lwd.frame = 0.25, col.frame = "black")
+      }
     }
     map("world", add = T, fill = T, col = 8, boundary = 1)
     box()
@@ -283,20 +311,38 @@ server <- function(input, output, session) {
   # correlation species ----
   plot_corr_species <- reactive({
    
-    data2 <- filtered_data_species()
-    data3 <- dcast(data = data2, formula = icesname ~ species, 
-      value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
-    rownames(data3) <- data3$icesname
-    data3 <- data3[,-1]
-    # corrTab <- cor(as.matrix(data3[,-1]))
+    # data2 <- filtered_data_species()
+    # data3 <- dcast(data = data2, formula = icesname ~ species, 
+    #   value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
+    # rownames(data3) <- data3$icesname
+    # data3 <- data3[,-1]
+    # # corrTab <- cor(as.matrix(data3[,-1]))
+    # 
+    # op <- par(cex = 1)
+    # # imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
+    # # plotCor(data3, log = FALSE)
+    # # mat <- round(cor(data3, use = "pairwise.complete.obs", method = "pearson"), 2)
+    # # imageCor(mat)
+    # mat <- cor(log(data3+1), use = "pairwise.complete.obs", method = "pearson")
+    # heatmap(mat, col = pals::ocean.balance(21), zlim = c(-1,1), symm = T, margins = c(5,5))
+    # 
+    # par(op)
     
-    op <- par(cex = 1.5, mar = c(1,1,1,1))
-    # imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
-    # plotCor(data3, log = FALSE)
-    mat <- round(cor(data3, use = "pairwise.complete.obs", method = "pearson"), 2)
-    imageCor(mat)
+    dfsub <- filtered_data()
     
-    par(op)
+    # reshape data using dcast from data.table
+    dat <- dcast(dfsub, icesname + gear_type + year + quarter ~ species, 
+             value.var = "landingsPerc", fill = 0)
+
+    # calculate distance matrix among species using base R dist
+    M <- as.matrix(dat[, -c(1:4)])
+    D <- vegan::vegdist(t(M), method = "bray")
+
+    # plot distance matrix as heatmap
+    # COL <- pals::brewer.spectral(21)
+    COL <- grey.colors(21, gamma = 0.2, start = 0.1, end = 0.9)
+
+    heatmap(as.matrix(D), col = COL, zlim = c(0, 1), symm = TRUE, margins = c(3, 4))
     
     recordPlot()
     
@@ -305,19 +351,37 @@ server <- function(input, output, session) {
   # correlation gear type ----
   plot_corr_gear_type <- reactive({
    
-    data2 <- filtered_data_gear_type()
-    data3 <- dcast(data = data2, formula = icesname ~ gear_type, 
-      value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
-    rownames(data3) <- data3$icesname
-    data3 <- data3[,-1]
-    # corrTab <- cor(as.matrix(data3[,-1]))
+    # data2 <- filtered_data_gear_type()
+    # data3 <- dcast(data = data2, formula = icesname ~ gear_type, 
+    #   value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
+    # rownames(data3) <- data3$icesname
+    # data3 <- data3[,-1]
+    # # corrTab <- cor(as.matrix(data3[,-1]))
+    # 
+    # op <- par(cex = 1)
+    # # imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
+    # # plotCor(data3, log = FALSE)
+    # # mat <- round(cor(data3, use = "pairwise.complete.obs", method = "pearson"), 2)
+    # # imageCor(mat)
+    # mat <- cor(log(data3+1), use = "pairwise.complete.obs", method = "pearson")
+    # heatmap(mat, col = pals::ocean.balance(21), zlim = c(-1,1), symm = T, margins = c(5,5))
+    # 
+    # par(op)
+    dfsub <- filtered_data()
     
-    op <- par(cex = 1.5, mar = c(1,1,1,1))
-    # imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
-    # plotCor(data3, log = FALSE)
-    mat <- round(cor(data3, use = "pairwise.complete.obs", method = "pearson"), 2)
-    imageCor(mat)
-    par(op)
+    # reshape data using dcast from data.table
+    dat <- dcast(dfsub, icesname + species + year + quarter ~ gear_type, 
+             value.var = "landingsPerc", fill = 0)
+
+    # calculate distance matrix among species using base R dist
+    M <- as.matrix(dat[, -c(1:4)])
+    D <- vegan::vegdist(t(M), method = "bray")
+
+    # plot distance matrix as heatmap
+    # COL <- pals::brewer.spectral(21)
+    COL <- grey.colors(21, gamma = 0.2, start = 0.1, end = 0.9)
+
+    heatmap(as.matrix(D), col = COL, zlim = c(0, 1), symm = TRUE, margins = c(3, 4))
     
     recordPlot()
     
