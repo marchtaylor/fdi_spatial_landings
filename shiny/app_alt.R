@@ -240,6 +240,8 @@ server <- function(input, output, session) {
   # map species ----
   plot_map_species <- reactive({
 
+    # op <- par(cex = 1.5, mar = c(2,2,1,1))
+
     data2 <- filtered_data_species()
     
     op <- par(cex = 1.5)
@@ -341,13 +343,6 @@ server <- function(input, output, session) {
     COL <- grey.colors(21, gamma = 0.2, start = 0.1, end = 0.9)
 
     heatmap(as.matrix(D), col = COL, zlim = c(0, 1), symm = TRUE, margins = c(3, 4))
-    # op <- par(cex = 1.5)
-    # # layout(matrix(1:2, nrow = 1, ncol = 2), widths = c(4,1.5), respect = F)
-    # # par(mar = c(3,3,1,0.5), mgp = c(2,0.5,0))
-    # sinkr::imageDimnames(mat = as.matrix(D), col = COL, zlim = c(0, 1), addLabels = F)
-    # # sinkr::imageScale(z = as.matrix(D), col = COL, zlim = c(0, 1), axis.pos = 4)
-    # # par(mar = c(3,0,1,5))
-    # par(op)
     
     recordPlot()
     
@@ -387,13 +382,6 @@ server <- function(input, output, session) {
     COL <- grey.colors(21, gamma = 0.2, start = 0.1, end = 0.9)
 
     heatmap(as.matrix(D), col = COL, zlim = c(0, 1), symm = TRUE, margins = c(3, 4))
-    # op <- par(cex = 1.5)
-    # # layout(matrix(1:2, nrow = 1, ncol = 2), widths = c(4,1.5), respect = F)
-    # # par(mar = c(3,3,1,0.5), mgp = c(2,0.5,0))
-    # sinkr::imageDimnames(mat = as.matrix(D), col = COL, zlim = c(0, 1), addLabels = F)
-    # # sinkr::imageScale(z = as.matrix(D), col = COL, zlim = c(0, 1), axis.pos = 4)
-    # # par(mar = c(3,0,1,5))
-    # par(op)
     
     recordPlot()
     
