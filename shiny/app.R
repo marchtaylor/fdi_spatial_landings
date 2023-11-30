@@ -128,37 +128,32 @@ ui <- fluidPage(
         ),
         tabPanel("Notes",
           br(),
-          p(em("The visualization uses FDI landings by various categories: 
+          p("The visualization uses FDI landings by various categories: 
             year, quarter, species, vessel length, gear type, mesh size, ICES 
-            rectangle (among others)")),
+            rectangle (among others)."),
           br(),
-          p(em("Maps aggregate filtered data per ICES rectange, either by 
-            species (left top panel) or gear type (right top panel). 
+          p("Top panels show maps of landings per ICES rectangle, 
+            aggregated either by species (left top panel) or gear type (right top panel). 
             When 'Scaled landings' is selected, 2D barplots fill the entire 
-            spatial rectangle (i.e. emphasise on composition). When unselected
-            the barplots area is relative to the rectangle 
-            with the maximum aggregated landings 
-            (emphasis on composition and magnitude).")),
+            spatial rectangle and reflect landings composition only. When unselected,
+            the barplots reflect both landings composition and magnitude."),
           br(),
-          p(em("Lower panels show the degree of dissimilarity (Bray-Curtis) in 
+          p("Lower panels show the degree of dissimilarity (Bray-Curtis) in 
             landings patterns among species (left lower panel) and gear types 
-            (right lower panel). Before computing dissimilarities, landings are
-            scaled in the following way:"),
-            br(),
-            tags$ol(
-              tags$li(em("Species comparison - 
-                landings are divided by the sum of landings by year and species, 
-                which accounts for differences in biomass among species.")), 
-              tags$li(em("Gear type comparison - 
-                landings are divided by the sum of landings by year, species and 
-                gear, which accounts for differences in biomass among species 
-                and fishing effort / catchability among gears."))
-            ),
-            br(),
-            em("Hierarchical clustering dendrograms illustrate patterns of 
-              dissimilarity among species / gears 
-              (Ward's minimum variance method is used).")
-          ),
+            (right lower panel). Dendrograms at the bottom of each plot show 
+            hierarchical clustering patterns (Ward's minimum variance method) 
+            of dissimilarity among species / gears.
+            The analysis is based on landings aggregated by 
+            year, species, gear type and ICES rectangle combinations.
+            Before computing dissimilarities, landings are scaled in the following way:"),
+          tags$ol(
+            tags$li("Species comparison - 
+              landings are divided by the sum of landings by year and species, 
+              which accounts for differences in biomass among species."), 
+            tags$li("Gear type comparison - 
+              landings are divided by the sum of landings by year, species and 
+              gear, which accounts for differences in biomass among species 
+              and fishing effort / catchability among gears.")),
           br(),
           style='width: 500px; height: 1000px'
         )
@@ -208,7 +203,7 @@ server <- function(input, output, session) {
     
     dfsub <- as.data.table(dfsub)
     
-    # eventually allow definition of aggregation ***
+    # eventually allow definition of aggregation for use in dissimilarity analysis ***
     dfsub <- dfsub[, .(landings = sum(totwghtlandg, na.rm = TRUE)), 
       by = .(icesname, gear_type, year, species)]
     
@@ -337,7 +332,7 @@ server <- function(input, output, session) {
     box()
     uSppCol <- unique(mapData$species[,c("species", "col")])
     uSppCol <- uSppCol[order(uSppCol$species),]
-    legend("topright", legend = uSppCol$species, col = uSppCol$col, fill = uSppCol$col)
+    legend("topright", legend = uSppCol$species, col = uSppCol$col, fill = uSppCol$col, cex = 0.75)
   
     # 2.2.2. map of gears -----
     plot(1, xlim = range(mapData$gear_type$lon, na.rm = TRUE), ylim = range(mapData$gear_type$lat, na.rm = TRUE), 
@@ -360,7 +355,7 @@ server <- function(input, output, session) {
     box()
     uGearCol <- unique(mapData$gear_type[,c("gear_type", "col")])
     uGearCol <- uGearCol[order(uGearCol$gear_type),]
-    legend("topright", legend = uGearCol$gear_type, col = uSppCol$col, fill = uGearCol$col)
+    legend("topright", legend = uGearCol$gear_type, col = uSppCol$col, fill = uGearCol$col, cex = 0.75)
     
     # 2.2.3. diss. of species  -----
     intData <- interaction_data()
