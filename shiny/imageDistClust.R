@@ -60,7 +60,7 @@ imageDistClust <- function(D,
   
   # dendrogram
   if(addDendro){
-    sinkr::embedPlot(expr = {
+    embedPlot(expr = {
       plot(hcd, type = "rectangle", 
         xlim = PAR$usr[1:2], xaxs = "i", leaflab = "none", axes = F, 
         ylim = c(max(hc$height), 0), edgePar = list(lwd = lwdDendro))
@@ -69,8 +69,8 @@ imageDistClust <- function(D,
   
   # scale
   if(addScale){
-    sinkr::embedPlot(expr = {
-      sinkr::imageScale(z = ztri, 
+    embedPlot(expr = {
+      imageScale(z = ztri, 
         zlim = zlim, col = col, add.axis = FALSE)
       axis(side = 1)
       mtext(labScale, side = 1, line = PAR$mgp[1], cex = PAR$cex.lab)

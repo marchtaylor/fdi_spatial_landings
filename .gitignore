@@ -54,6 +54,7 @@ rsconnect/
 # raw FDI data folder
 /data/FDI_spatial_data_EU28
 
+tmp
 
 
 *html
