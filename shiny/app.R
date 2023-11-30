@@ -19,21 +19,35 @@ library(shinyjs)
 library(reshape2)
 library(data.table)
 
-source("imageDimnames.r")
-source("plotCor.r")
-source("utilities_load_ecoregion_shp.r")
-source("utilities_ecoregion_mapping.r")
+
+# figure attributes -------------------------------------------------------
+figattr <- list()
+figattr$png.width = 8
+figattr$png.height = 9
+figattr$png.unit = "in"
+figattr$png.res = 400
+figattr$ps = 12
+figattr$lo <- matrix(1:4, nrow = 2, ncol = 2, byrow = TRUE)
+figattr$widths = c(3.5,3.5)
+figattr$heights = c(4.5,3.5)
+figattr$width = 800
+figattr$height = (figattr$png.height * figattr$png.res) / (figattr$png.width * figattr$png.res / figattr$width)
 
 
 # load function -----------------------------------------------------------
-source("imageDimnames.r")
+source("imageDistClust.R")
+source("stockInteraction.R")
+source("embedPlot.R")
+source("imageScale.R")
+source("val2col.R")
+source("matrixPoly.R")
 
 
 # Load data
 # load("data.Rdata")
 load("Data/fdi_ecoregion/Greater North Sea_data.Rdata")
 
-# extract mesh size ranges
+# extract mesh size ranges !move to data pre-processing ***
 mesh_size_split <- strsplit(data$mesh_size_range, "D")
 mesh_sizes <- suppressWarnings(as.numeric(do.call("c", mesh_size_split)))
 mesh_size_range <- range(unique(mesh_sizes), na.rm = TRUE)
@@ -43,25 +57,14 @@ data$mesh_size_min <- as.numeric(unlist(lapply(mesh_size_split, FUN = function(x
 data$mesh_size_max <- as.numeric(unlist(lapply(mesh_size_split, FUN = function(x){x[2]})))
 
 # data <- as.data.table(data)  
+# input <- list(); input$year_range <- c(max(data$year)-3, max(data$year)); input$vessel_length <- c("VL1218", "VL1824"); input$gear_type <-  c("OTB", "OTM", "SSC", "TBB"); input$species <- c("COD", "HAD", "POK", "WHG"); input$mesh_range <- c(0, 250); input$pal <- "glasbey"; input$sc <- 1
 
-# Define UI
+# 1. Define UI -----
 ui <- fluidPage(
-  # Sidebar with filters
+  # 1.1. Sidebar -----
   sidebarLayout(
-    sidebarPanel(width = 3,
-      leafletOutput("map_ecoregion"),
-
-      selectizeInput(
-        inputId = "selected_locations",
-        label = "ICES Ecoregions",
-        choices = sort(shape_eco$Ecoregion),
-        selected = "Greater North Sea",
-        multiple = FALSE,
-        width = "100%",
-        options = list(
-          placeholder = "Select Ecoregion(s)"
-        )
-      ),
+    sidebarPanel(
+      width = 3,
 
       sliderInput("year_range", "Year range:", step = 1, sep = "",
         min = min(data$year), max = max(data$year),
@@ -69,36 +72,36 @@ ui <- fluidPage(
       
       
       selectInput(inputId = "vessel_length", label = "Vessel Length:",
-                  selected = c("VL1218", "VL1824"),
-                  choices = list("0-12m" = "VL0010",
-                                 "10-12m" = "VL1012",
-                                 "12-18m" = "VL1218",
-                                 "18-24m" = "VL1824",
-                                 "24-40m" = "VL2440",
-                                 "40m+" = "VL40XX",
-                                 "Not known" = "NK"
-                                 ),
-                  
-                  multiple = TRUE),
+        selected = c("VL0010", "VL1218", "VL1824", "VL2440", "VL40XX"),
+        choices = list(
+          "0-12m" = "VL0010",
+          "10-12m" = "VL1012",
+          "12-18m" = "VL1218",
+          "18-24m" = "VL1824",
+          "24-40m" = "VL2440",
+          "40m+" = "VL40XX",
+          "Not known" = "NK"
+        ),
+        multiple = TRUE),
       
       
       selectInput(inputId = "gear_type", label = "Gear type:",
-        selected = c("OTB", "OTM"),
+        selected = c("OTB", "OTM", "OTT", "SSC", "TBB", "GNS"),
         choices = sort(unique(data$gear_type)),
         multiple = TRUE),
       
-      sliderInput("mesh_range", "Mesh range [mm]:", step = 10, sep = "",
+      sliderInput(inputId = "mesh_range", label = "Mesh range [mm]:", 
+        step = 10, sep = "",
         min = 0, max = 250,
         value = c(0, 250)),
       
       selectInput(inputId = "species", label = "Species:", 
-        selected = c("COD", "HAD", "POK", "WHG"),
+        selected = c("COD", "HAD", "POK", "WHG", "PLE", "SOL", "BLL", "DAB", "LEM"),
         choices = sort(unique(data$species)),
         multiple = TRUE),
       
-      
       selectInput(inputId = "pal", label = "Palette:", 
-        selected = "spectral",
+        selected = "glasbey",
         choices = c("spectral", "paired", "cols25", 
           "set1", "set2", "set3", 
           "alphabet", "alphabet2", "polychrome", "glasbey"),
@@ -106,41 +109,68 @@ ui <- fluidPage(
       
       checkboxInput(inputId = "sc", label = "Scaled landings", value = TRUE),
       
-      # downloadLink("downloadMap", "Download Map")
-      downloadButton("downloadMap", "Download Map")
+      actionButton("button", "Update", icon("refresh"),
+        class = "btn btn-primary"),
+      hr(),
+      downloadButton("download", "Download Image")
       
     ),
-
-    mainPanel(width = 9,
-      fluidRow(
-        column(5, plotOutput("map_species", width = "100%", height = 600)),
-        column(5, plotOutput("map_gear_type", width = "100%", height = 600))
-      ),
-      fluidRow(
-        column(5, plotOutput("corr_species", width = "100%", height = 400)),
-        column(5, plotOutput("corr_gear_type", width = "100%", height = 400))
+  
+    # 1.2. Main panel -----
+    mainPanel(
+      width = 9,
+      tabsetPanel(type = "tabs",
+        tabPanel("Plot", 
+          imageOutput("myImage")
+        ),
+        tabPanel("Notes",
+          br(),
+          p(em("The visualization uses FDI landings by various categories: 
+            year, quarter, species, vessel length, gear type, mesh size, ICES 
+            rectangle (among others)")),
+          br(),
+          p(em("Maps aggregate filtered data per ICES rectange, either by 
+            species (left top panel) or gear type (right top panel). 
+            When 'Scaled landings' is selected, 2D barplots fill the entire 
+            spatial rectangle (i.e. emphasise on composition). When unselected
+            the barplots area is relative to the rectangle 
+            with the maximum aggregated landings 
+            (emphasis on composition and magnitude).")),
+          br(),
+          p(em("Lower panels show the degree of dissimilarity (Bray-Curtis) in 
+            landings patterns among species (left lower panel) and gear types 
+            (right lower panel). Before computing dissimilarities, landings are
+            scaled in the following way:"),
+            br(),
+            tags$ol(
+              tags$li(em("Species comparison - 
+                landings are divided by the sum of landings by year and species, 
+                which accounts for differences in biomass among species.")), 
+              tags$li(em("Gear type comparison - 
+                landings are divided by the sum of landings by year, species and 
+                gear, which accounts for differences in biomass among species 
+                and fishing effort / catchability among gears."))
+            ),
+            br(),
+            em("Hierarchical clustering dendrograms illustrate patterns of 
+              dissimilarity among species / gears 
+              (Ward's minimum variance method is used).")
+          ),
+          br(),
+          style='width: 500px; height: 1000px'
+        )
       )
     )
-        
-    
-    
-    # # Main panel with map
-    # mainPanel(
-    #   plotOutput("map_species", height = 800, width = 600),
-    #   plotOutput("corr_species", height = 400, width = 600)
-    # )
-    
 
 
   )
 )
 
-# Define server logic
+# 2. Define server logic -----
 server <- function(input, output, session) {
-  map_panel_server(input, output, session)
 
-  ## DATA PREPARATION ----  
-  # color palette look-up ----
+  # 2.1. Data preparation -----  
+  # 2.1.1. color palette look-up table -----
   lutPal <- rbind(
     data.frame(pal = "spectral", fun = "brewer.spectral"),
     data.frame(pal = "paired", fun = "brewer.paired"),
@@ -154,8 +184,9 @@ server <- function(input, output, session) {
     data.frame(pal = "glasbey", fun = "glasbey")
   )
   
-  # filter data ----
-  filtered_data <- reactive({
+  # 2.1.2. filter data ----
+  filtered_data <- eventReactive(eventExpr = input$button, {
+    
     dfsub <- subset(data, species %in% input$species & 
       gear_type %in% input$gear_type &
       vessel_length %in% input$vessel_length &  
@@ -165,96 +196,125 @@ server <- function(input, output, session) {
       year <= input$year_range[2])
     
     dfsub <- as.data.table(dfsub)
+    
+    # eventually allow definition of aggregation ***
     dfsub <- dfsub[, .(landings = sum(totwghtlandg, na.rm = TRUE)), 
-        by = .(icesname, gear_type, year, quarter, species)]
-    dfsub[, landingsSum := sum(landings), by = list(year, species)]
-    dfsub[, landingsPerc := landings/landingsSum]
+      by = .(icesname, gear_type, year, species)]
+    
+
     dfsub
   })
   
-  # species spatial aggregation ----
-  filtered_data_species <- reactive({
+  # 1.3. color palette look-up tables
+  make_lutCol <- eventReactive(eventExpr = input$button, {
+    lutColSpp <- data.frame(species = sort(unique(data$species)))
+    lutColSpp$col <- do.call(lutPal$fun[match(input$pal, lutPal$pal)],
+      args = list(n = length(lutColSpp$species)))
+    
+    lutColGear <- data.frame(gear_type = sort(unique(data$gear_type)))
+    lutColGear$col <- do.call(lutPal$fun[match(input$pal, lutPal$pal)],
+      args = list(n = length(lutColGear$gear_type)))
+    
+    lut <- list(lutColSpp = lutColSpp, lutColGear = lutColGear)
+    lut
+  })
+  
+
+  
+  # 2.1.3. interaction data -----
+  interaction_data <- eventReactive(eventExpr = input$button, {
     
     dfsub <- filtered_data()
     
-    lutCol <- data.frame(species = sort(unique(data$species)))
-    lutCol$col <- do.call(lutPal$fun[match(input$pal, lutPal$pal)],
-      args = list(n = length(lutCol$species)))
+    # species comparisons scale yearly totals by species to account for biomass differences
+    # gear comparisons scale yearly totals by species and gear type to account for biomass and effort differences
+    # dfsub[, landingsSum := sum(landings, na.rm = TRUE), by = .(year, species)]
+    # dfsub[, landingsSc := landings/landingsSum]
+    dfsub[, landingsScSpp := landings / sum(landings, na.rm = TRUE), by = .(year, species)]
+    dfsub[, landingsScGear := landings / sum(landings, na.rm = TRUE), by = .(year, species, gear_type)]
+    dfsub[is.na(landingsScSpp), landingsScSpp := 0]
+    dfsub[is.na(landingsScGear), landingsScGear := 0]
     
-    # aggregate
+    # species
+    cats_incl <- c("icesname", "gear_type", "year")
+    compareVar <- "species"
+    fmla <- formula(paste(paste(cats_incl, collapse = " + "),"~",  compareVar))
+    tmp <- dcast(data = as.data.frame(dfsub), formula = fmla, 
+      value.var = "landingsScSpp", fun.aggregate = sum, fill = 0)
+    
+    intSpp <- vegan::vegdist(x = t(tmp[,-seq(cats_incl)]), method = "bray")
+
+    # gear
+    cats_incl <- c("icesname", "species", "year")
+    compareVar <- "gear_type"
+    fmla <- formula(paste(paste(cats_incl, collapse = " + "),"~",  compareVar))
+    tmp <- dcast(data = as.data.frame(dfsub), formula = fmla, 
+      value.var = "landingsScGear", fun.aggregate = sum, fill = 0)
+    intGear <- vegan::vegdist(x = t(tmp[,-seq(cats_incl)]), method = "bray")
+    
+    intData <- list(species = intSpp, gear_type = intGear)
+
+  })
+  
+  # 2.1.4. map data -----
+  map_data <- eventReactive(eventExpr = input$button, {
+    dfsub <- filtered_data()
+    lut <- make_lutCol()
+    
+    # aggregate by species & ICES rectangle
+    lutAgg <- lut$lutColSpp
     agg <- dfsub[, .(landings = sum(landings, na.rm = TRUE)), 
       by = .(icesname, species)]
-    agg[, landingsSum := sum(landings), by = .(species)]
-    agg[, landingsPerc := landings/landingsSum]
-
-    
-    # agg1 <- aggregate(totwghtlandg ~ icesname + species, data = dfsub, FUN = sum, na.rm = T)
-    # names(agg1)[3] <- "landings"
-    # agg1 <- subset(agg1, landings > 0) # remove zero landings
-    # agg2 <- aggregate(landings ~ icesname, data = agg1, FUN = sum, na.rm = T)
-    # names(agg2)[2] <- "sumLandings"
-    # 
-    # agg <- merge(agg1, agg2, all.x = T)
-    # agg$percLandings <- agg$landings / agg$sumLandings
-    
-    
-    agg$sc <- sqrt(agg$landingsSum/max(agg$landingsSum, na.rm = T))
+    agg[, landingsSum := sum(landings), by = .(icesname)]
+    agg[, landingsFrac := landings/landingsSum]
+    agg[is.na(landingsFrac), landingsFrac := 0]
+    agg[, sc := sqrt(landingsSum/max(landingsSum, na.rm = T))]
+    agg[is.na(sc), sc := 0]
     agg <- cbind(agg, ices.rect(rectangle = agg$icesname))
-    agg$col <- lutCol$col[match(agg$species, lutCol$species)]
+    agg$col <- lutAgg$col[match(agg$species, lutAgg$species)]
+    aggSpp <- agg
 
-    agg
-  })
-  
-  # gear type spatial aggregation ----
-  filtered_data_gear_type <- reactive({
-    
-    dfsub <- filtered_data()
-    
-    lutCol <- data.frame(gear_type = sort(unique(data$gear_type)))
-    lutCol$col <- do.call(lutPal$fun[match(input$pal, lutPal$pal)],
-      args = list(n = length(lutCol$gear_type)))
-    
-    # aggregate
+    # aggregate by species & ICES rectangle
+    lutAgg <- lut$lutColGear
     agg <- dfsub[, .(landings = sum(landings, na.rm = TRUE)), 
       by = .(icesname, gear_type)]
-    agg[, landingsSum := sum(landings), by = .(gear_type)]
-    agg[, landingsPerc := landings/landingsSum]
-    
-    # agg1 <- aggregate(totwghtlandg ~ icesname + gear_type, data = dfsub, FUN = sum, na.rm = T)
-    # names(agg1)[3] <- "landings"
-    # agg1 <- subset(agg1, landings > 0) # remove zero landings
-    # agg2 <- aggregate(landings ~ icesname, data = agg1, FUN = sum, na.rm = T)
-    # names(agg2)[2] <- "sumLandings"
-    # 
-    # agg <- merge(agg1, agg2, all.x = T)
-    # agg$percLandings <- agg$landings / agg$sumLandings
-    
-    agg$sc <- sqrt(agg$landingsSum/max(agg$landingsSum, na.rm = T))
+    agg[, landingsSum := sum(landings), by = .(icesname)]
+    agg[, landingsFrac := landings/landingsSum]
+    agg[is.na(landingsFrac), landingsFrac := 0]
+    agg[, sc := sqrt(landingsSum/max(landingsSum, na.rm = T))]
+    agg[is.na(sc), sc := 0]
     agg <- cbind(agg, ices.rect(rectangle = agg$icesname))
-    agg$col <- lutCol$col[match(agg$gear_type, lutCol$gear_type)]
-
-    agg
+    agg$col <- lutAgg$col[match(agg$gear_type, lutAgg$gear_type)]
+    aggGear <- agg
+    
+    mapData <- list(species = aggSpp, gear_type = aggGear)
   })
   
-  ## PLOTS ----  
-  # map species ----
-  plot_map_species <- reactive({
+ 
+  # 2.2. Image --------------------------------------------------------------------
+  image <- eventReactive(eventExpr = input$button, {
+    outfile <- tempfile(fileext = ".png")
 
-    data2 <- filtered_data_species()
+    png(outfile, width = figattr$png.width, height = figattr$png.height, units = figattr$png.unit, res = figattr$png.res)
+    op <- par(no.readonly = TRUE)
+    lo <- layout(figattr$lo, 
+      widths = figattr$widths, heights = figattr$heights, respect = T)
+    par(cex = 1, mar = c(3,3,1,1), ps = figattr$ps)
     
-    op <- par(cex = 1.5)
+    mapData <- map_data()
+    
+    # 2.2.1. map of species -----
     plot(1, xlim = c(-6,15), ylim = c(51,62), 
       t = "n", asp = 2, xlab = "", ylab = "")
-    # map("world", xlim = range(agg$lon), ylim = range(agg$lat))
-    urect <- unique(data2$icesname)
+    urect <- unique(mapData$species$icesname)
     for(i in seq(urect)){
-      aggsub <- subset(data2, icesname == urect[i])
+      aggsub <- subset(mapData$species, icesname == urect[i])
       sc <- ifelse(input$sc, 1, aggsub$sc[1])
-
-      excl <- which(aggsub$landingsPerc==0)
-      if(length(excl)>0) aggsub <- aggsub[-which(aggsub$landingsPerc==0)]
+  
+      excl <- which(aggsub$landingsFrac==0)
+      if(length(excl)>0) aggsub <- aggsub[-which(aggsub$landingsFrac==0)]
       if(nrow(aggsub)>0){
-        barplot2D(z = aggsub$landingsPerc, x = aggsub$lon[1], y = aggsub$lat[1],
+        barplot2D(z = aggsub$landingsFrac, x = aggsub$lon[1], y = aggsub$lat[1],
           width = 1*sc, height = 0.5*sc,
           colour = aggsub$col, border = NA,
           lwd.frame = 0.25, col.frame = "black")
@@ -262,34 +322,22 @@ server <- function(input, output, session) {
     }
     map("world", add = T, fill = T, col = 8, boundary = 1)
     box()
-    uSppCol <- unique(data2[,c("species", "col")])
+    uSppCol <- unique(mapData$species[,c("species", "col")])
     uSppCol <- uSppCol[order(uSppCol$species),]
     legend("topright", legend = uSppCol$species, col = uSppCol$col, fill = uSppCol$col)
-    par(op)
-
-    recordPlot()
-    
-  })
   
-  # map gear type ----
-  plot_map_gear_type <- reactive({
-    
-
-    data2 <- filtered_data_gear_type()
-    
-    op <- par(cex = 1.5)
+    # 2.2.2. map of gears -----
     plot(1, xlim = c(-6,15), ylim = c(51,62), 
       t = "n", asp = 2, xlab = "", ylab = "")
-    # map("world", xlim = range(agg$lon), ylim = range(agg$lat))
-    urect <- unique(data2$icesname)
+    urect <- unique(mapData$gear_type$icesname)
     for(i in seq(urect)){
-      aggsub <- subset(data2, icesname == urect[i])
+      aggsub <- subset(mapData$gear_type, icesname == urect[i])
       sc <- ifelse(input$sc, 1, aggsub$sc[1])
-
-      excl <- which(aggsub$landingsPerc==0)
-      if(length(excl)>0) aggsub <- aggsub[-which(aggsub$landingsPerc==0)]
+  
+      excl <- which(aggsub$landingsFrac==0)
+      if(length(excl)>0) aggsub <- aggsub[-which(aggsub$landingsFrac==0)]
       if(nrow(aggsub)>0){
-        barplot2D(z = aggsub$landingsPerc, x = aggsub$lon[1], y = aggsub$lat[1],
+        barplot2D(z = aggsub$landingsFrac, x = aggsub$lon[1], y = aggsub$lat[1],
           width = 1*sc, height = 0.5*sc,
           colour = aggsub$col, border = NA,
           lwd.frame = 0.25, col.frame = "black")
@@ -297,147 +345,51 @@ server <- function(input, output, session) {
     }
     map("world", add = T, fill = T, col = 8, boundary = 1)
     box()
-    uGearCol <- unique(data2[,c("gear_type", "col")])
+    uGearCol <- unique(mapData$gear_type[,c("gear_type", "col")])
     uGearCol <- uGearCol[order(uGearCol$gear_type),]
     legend("topright", legend = uGearCol$gear_type, col = uSppCol$col, fill = uGearCol$col)
-    par(op)
-
-    recordPlot()
     
+    # 2.2.3. diss. of species  -----
+    intData <- interaction_data()
+    par(mar = c(5,3,1,1))
+    
+    imageDistClust(D = intData$species, hclustMethod = "ward.D", zlim = c(0,1), 
+      col = rev(pals::brewer.greys(10)), atScale = c(0,0.5,0.95,1),
+      cex.diag = NULL, cellBorder = 1, cellLwd = 1, lwdDendro = 1)
+
+    # 2.2.4. diss. of gears  -----
+    imageDistClust(D = intData$gear_type, hclustMethod = "ward.D", zlim = c(0,1), 
+      col = rev(pals::brewer.greys(10)), atScale = c(0,0.5,0.95,1),
+      cex.diag = NULL, cellBorder = 1, cellLwd = 1, lwdDendro = 1)
+    
+  
+  par(op)
+  dev.off()
+
+  list(
+    src = outfile,
+    contentType = "image/png",
+    width = figattr$width, height = figattr$height, 
+    alt = "This is alternate text"
+  )
   })
   
-  # correlation species ----
-  plot_corr_species <- reactive({
-   
-    # data2 <- filtered_data_species()
-    # data3 <- dcast(data = data2, formula = icesname ~ species, 
-    #   value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
-    # rownames(data3) <- data3$icesname
-    # data3 <- data3[,-1]
-    # # corrTab <- cor(as.matrix(data3[,-1]))
-    # 
-    # op <- par(cex = 1)
-    # # imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
-    # # plotCor(data3, log = FALSE)
-    # # mat <- round(cor(data3, use = "pairwise.complete.obs", method = "pearson"), 2)
-    # # imageCor(mat)
-    # mat <- cor(log(data3+1), use = "pairwise.complete.obs", method = "pearson")
-    # heatmap(mat, col = pals::ocean.balance(21), zlim = c(-1,1), symm = T, margins = c(5,5))
-    # 
-    # par(op)
-    
-    dfsub <- filtered_data()
-    
-    # reshape data using dcast from data.table
-    dat <- dcast(dfsub, icesname + gear_type + year + quarter ~ species, 
-             value.var = "landingsPerc", fill = 0)
-
-    # calculate distance matrix among species using base R dist
-    M <- as.matrix(dat[, -c(1:4)])
-    D <- vegan::vegdist(t(M), method = "bray")
-
-    # plot distance matrix as heatmap
-    # COL <- pals::brewer.spectral(21)
-    COL <- grey.colors(21, gamma = 0.2, start = 0.1, end = 0.9)
-
-    heatmap(as.matrix(D), col = COL, zlim = c(0, 1), symm = TRUE, margins = c(3, 4))
-    # op <- par(cex = 1.5)
-    # # layout(matrix(1:2, nrow = 1, ncol = 2), widths = c(4,1.5), respect = F)
-    # # par(mar = c(3,3,1,0.5), mgp = c(2,0.5,0))
-    # sinkr::imageDimnames(mat = as.matrix(D), col = COL, zlim = c(0, 1), addLabels = F)
-    # # sinkr::imageScale(z = as.matrix(D), col = COL, zlim = c(0, 1), axis.pos = 4)
-    # # par(mar = c(3,0,1,5))
-    # par(op)
-    
-    recordPlot()
-    
-  })
-  
-  # correlation gear type ----
-  plot_corr_gear_type <- reactive({
-   
-    # data2 <- filtered_data_gear_type()
-    # data3 <- dcast(data = data2, formula = icesname ~ gear_type, 
-    #   value.var = "landings", fun.aggregate = sum, na.rm = TRUE)
-    # rownames(data3) <- data3$icesname
-    # data3 <- data3[,-1]
-    # # corrTab <- cor(as.matrix(data3[,-1]))
-    # 
-    # op <- par(cex = 1)
-    # # imageDimnames(round(corrTab,2), col = colorRampPalette(c(2,"white", 4))(21), zlim = c(-1,1))
-    # # plotCor(data3, log = FALSE)
-    # # mat <- round(cor(data3, use = "pairwise.complete.obs", method = "pearson"), 2)
-    # # imageCor(mat)
-    # mat <- cor(log(data3+1), use = "pairwise.complete.obs", method = "pearson")
-    # heatmap(mat, col = pals::ocean.balance(21), zlim = c(-1,1), symm = T, margins = c(5,5))
-    # 
-    # par(op)
-    dfsub <- filtered_data()
-    
-    # reshape data using dcast from data.table
-    dat <- dcast(dfsub, icesname + species + year + quarter ~ gear_type, 
-             value.var = "landingsPerc", fill = 0)
-
-    # calculate distance matrix among species using base R dist
-    M <- as.matrix(dat[, -c(1:4)])
-    D <- vegan::vegdist(t(M), method = "bray")
-
-    # plot distance matrix as heatmap
-    # COL <- pals::brewer.spectral(21)
-    COL <- grey.colors(21, gamma = 0.2, start = 0.1, end = 0.9)
-
-    heatmap(as.matrix(D), col = COL, zlim = c(0, 1), symm = TRUE, margins = c(3, 4))
-    # op <- par(cex = 1.5)
-    # # layout(matrix(1:2, nrow = 1, ncol = 2), widths = c(4,1.5), respect = F)
-    # # par(mar = c(3,3,1,0.5), mgp = c(2,0.5,0))
-    # sinkr::imageDimnames(mat = as.matrix(D), col = COL, zlim = c(0, 1), addLabels = F)
-    # # sinkr::imageScale(z = as.matrix(D), col = COL, zlim = c(0, 1), axis.pos = 4)
-    # # par(mar = c(3,0,1,5))
-    # par(op)
-    
-    recordPlot()
-    
-  })
-
-  
-  
-  # Render map(s)
-  output$map_species <- renderPlot({
-    replayPlot(req(plot_map_species()))
-    # plot_map()
-  })
-  
-  output$map_gear_type <- renderPlot({
-    replayPlot(req(plot_map_gear_type()))
-    # plot_map()
-  })
-  
-  # Render corr plot
-  output$corr_species <- renderPlot({
-    # replayPlot(req(plot_map()))
-    replayPlot(req(plot_corr_species()))
-  })
-  
-  output$corr_gear_type <- renderPlot({
-    # replayPlot(req(plot_map()))
-    replayPlot(req(plot_corr_gear_type()))
-  })
-  
-  
-  
-  # output$corr <- renderPlot({
-  #   replayPlot(req(plot_corr()))
-  # }, height = 400, width = 400)
-  
-  output$downloadMap <- downloadHandler(
-    filename = function(){"output.png"},
-    content = function(file){
-      png(file, height = 800, width = 650)
-        replayPlot(plot_map_species())
-      dev.off()
-    }
+  output$myImage <- renderImage(
+    {
+      image()
+    },
+    deleteFile = FALSE
   )
 
+  output$download <- downloadHandler(
+    filename = function() {
+      "generated_plot.png"
+    },
+    content = function(file) {
+      img <- image()$src
+      file.copy(img, file)
+    }
+  )
 }
 
 # Run the app
