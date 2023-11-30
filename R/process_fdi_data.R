@@ -13,7 +13,7 @@ fnames
 ecoRegions <- sort(unique(lutEcoRegion$ecoregion))
 
 
-for(i in seq(ecoRegions)[-c(1:9)]){ # for each ecoregion
+for(i in seq(ecoRegions)){ # for each ecoregion
   
   res <- vector("list", length(fnames))
   for(j in seq(res)){
@@ -48,6 +48,15 @@ for(i in seq(ecoRegions)[-c(1:9)]){ # for each ecoregion
     
     data <- subset(res2, subset = species %in% sppSub)
     
+    mesh_size_split <- strsplit(data$mesh_size_range, "D")
+    mesh_sizes <- suppressWarnings(as.numeric(do.call("c", mesh_size_split)))
+    mesh_size_range <- range(unique(mesh_sizes), na.rm = TRUE)
+    mesh_size_split <- lapply(mesh_size_split, FUN = function(x){if(length(x)<2){c(mesh_size_range)}else{x}})
+    mesh_size_split <- lapply(mesh_size_split, FUN = function(x){if(x[2]=="XX"){c(x[1], mesh_size_range[2])}else{x}})
+    data$mesh_size_min <- as.numeric(unlist(lapply(mesh_size_split, FUN = function(x){x[1]})))
+    data$mesh_size_max <- as.numeric(unlist(lapply(mesh_size_split, FUN = function(x){x[2]})))
+    data <- as.data.table(data)
+    
     # save ecoregion output
     save(data, file = file.path("shiny/Data/fdi_ecoregion/", paste0(ecoRegions[i], "_data.Rdata")))
   }
@@ -59,4 +68,5 @@ fnames <- fnames[grep(pattern = "_data.Rdata", x = fnames)]
 fnames
 
 ecoRegions <- unlist(lapply(strsplit(fnames, split = "_"), FUN = function(x){x[1]}))
-save(ecoRegions, file = "shiny/Data/fdi_ecoregion/ecoRegions.csv")
+tmp <- data.frame("ecoRegion" = ecoRegions)
+save(tmp, file = "shiny/Data/fdi_ecoregion/ecoRegions.csv")

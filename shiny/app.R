@@ -44,20 +44,11 @@ source("matrixPoly.R")
 
 
 # Load data
-# load("data.Rdata")
+# load("shiny/Data/fdi_ecoregion/Greater North Sea_data.Rdata")
 load("Data/fdi_ecoregion/Greater North Sea_data.Rdata")
 
-# extract mesh size ranges !move to data pre-processing ***
-mesh_size_split <- strsplit(data$mesh_size_range, "D")
-mesh_sizes <- suppressWarnings(as.numeric(do.call("c", mesh_size_split)))
-mesh_size_range <- range(unique(mesh_sizes), na.rm = TRUE)
-mesh_size_split <- lapply(mesh_size_split, FUN = function(x){if(length(x)<2){c(mesh_size_range)}else{x}})
-mesh_size_split <- lapply(mesh_size_split, FUN = function(x){if(x[2]=="XX"){c(x[1], mesh_size_range[2])}else{x}})
-data$mesh_size_min <- as.numeric(unlist(lapply(mesh_size_split, FUN = function(x){x[1]})))
-data$mesh_size_max <- as.numeric(unlist(lapply(mesh_size_split, FUN = function(x){x[2]})))
 
-# data <- as.data.table(data)  
-# input <- list(); input$year_range <- c(max(data$year)-3, max(data$year)); input$vessel_length <- c("VL1218", "VL1824"); input$gear_type <-  c("OTB", "OTM", "SSC", "TBB"); input$species <- c("COD", "HAD", "POK", "WHG"); input$mesh_range <- c(0, 250); input$pal <- "glasbey"; input$sc <- 1
+# input <- list(); input$ecoregion = "Greater North Sea"; input$year_range <- c(max(data$year)-3, max(data$year)); input$vessel_length <- c("VL1218", "VL1824"); input$gear_type <- c("OTB", "OTM", "SSC", "TBB"); input$species <- c("COD", "HAD", "POK", "WHG"); input$mesh_range <- c(0, 250); input$pal <- "glasbey"; input$sc <- 1
 
 # 1. Define UI -----
 ui <- fluidPage(
@@ -65,6 +56,18 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       width = 3,
+      
+      # selectInput(inputId = "ecoregion", label = "Select Ecoregion:",
+      #   selected = c("Greater North Sea"),
+      #   choices = list("Azores", "Baltic Sea", "Barents Sea",
+      #     "Bay of Biscay and the Iberian Coast",
+      #     "Celtic Seas", "Faroes", "Greater North Sea",
+      #     "Greenland Sea", "Norwegian Sea", "Oceanic Northeast Atlantic",
+      #     "Western Mediterranean Sea"),
+      #   multiple = FALSE),
+      # actionButton("buttonEcoregion", "Update Ecoregion", icon("refresh"),
+      #   class = "btn btn-primary"),
+      # hr(),
 
       sliderInput("year_range", "Year range:", step = 1, sep = "",
         min = min(data$year), max = max(data$year),
@@ -109,7 +112,7 @@ ui <- fluidPage(
       
       checkboxInput(inputId = "sc", label = "Scaled landings", value = TRUE),
       
-      actionButton("button", "Update", icon("refresh"),
+      actionButton("buttonPlots", "Update plots", icon("refresh"),
         class = "btn btn-primary"),
       hr(),
       downloadButton("download", "Download Image")
@@ -170,6 +173,14 @@ ui <- fluidPage(
 server <- function(input, output, session) {
 
   # 2.1. Data preparation -----  
+  # raw_data <- eventReactive(eventExpr = input$buttonEcoregion, {
+  #   fname <- paste0("Data/fdi_ecoregion/", input$ecoregion, "_data.Rdata", sep = "")
+  #   load(fname)
+  #   data
+  # })
+  
+  
+  
   # 2.1.1. color palette look-up table -----
   lutPal <- rbind(
     data.frame(pal = "spectral", fun = "brewer.spectral"),
@@ -185,8 +196,8 @@ server <- function(input, output, session) {
   )
   
   # 2.1.2. filter data ----
-  filtered_data <- eventReactive(eventExpr = input$button, {
-    
+  filtered_data <- eventReactive(eventExpr = input$buttonPlots, {
+    # data <- raw_data()
     dfsub <- subset(data, species %in% input$species & 
       gear_type %in% input$gear_type &
       vessel_length %in% input$vessel_length &  
@@ -206,7 +217,8 @@ server <- function(input, output, session) {
   })
   
   # 1.3. color palette look-up tables
-  make_lutCol <- eventReactive(eventExpr = input$button, {
+  make_lutCol <- eventReactive(eventExpr = input$buttonPlots, {
+    # data <- raw_data()
     lutColSpp <- data.frame(species = sort(unique(data$species)))
     lutColSpp$col <- do.call(lutPal$fun[match(input$pal, lutPal$pal)],
       args = list(n = length(lutColSpp$species)))
@@ -222,8 +234,8 @@ server <- function(input, output, session) {
 
   
   # 2.1.3. interaction data -----
-  interaction_data <- eventReactive(eventExpr = input$button, {
-    
+  interaction_data <- eventReactive(eventExpr = input$buttonPlots, {
+
     dfsub <- filtered_data()
     
     # species comparisons scale yearly totals by species to account for biomass differences
@@ -239,7 +251,7 @@ server <- function(input, output, session) {
     cats_incl <- c("icesname", "gear_type", "year")
     compareVar <- "species"
     fmla <- formula(paste(paste(cats_incl, collapse = " + "),"~",  compareVar))
-    tmp <- dcast(data = as.data.frame(dfsub), formula = fmla, 
+    tmp <- reshape2::dcast(data = as.data.frame(dfsub), formula = fmla, 
       value.var = "landingsScSpp", fun.aggregate = sum, fill = 0)
     
     intSpp <- vegan::vegdist(x = t(tmp[,-seq(cats_incl)]), method = "bray")
@@ -248,7 +260,7 @@ server <- function(input, output, session) {
     cats_incl <- c("icesname", "species", "year")
     compareVar <- "gear_type"
     fmla <- formula(paste(paste(cats_incl, collapse = " + "),"~",  compareVar))
-    tmp <- dcast(data = as.data.frame(dfsub), formula = fmla, 
+    tmp <- reshape2::dcast(data = as.data.frame(dfsub), formula = fmla, 
       value.var = "landingsScGear", fun.aggregate = sum, fill = 0)
     intGear <- vegan::vegdist(x = t(tmp[,-seq(cats_incl)]), method = "bray")
     
@@ -257,7 +269,8 @@ server <- function(input, output, session) {
   })
   
   # 2.1.4. map data -----
-  map_data <- eventReactive(eventExpr = input$button, {
+  map_data <- eventReactive(eventExpr = input$buttonPlots, {
+
     dfsub <- filtered_data()
     lut <- make_lutCol()
     
@@ -292,7 +305,7 @@ server <- function(input, output, session) {
   
  
   # 2.2. Image --------------------------------------------------------------------
-  image <- eventReactive(eventExpr = input$button, {
+  image <- eventReactive(eventExpr = input$buttonPlots, {
     outfile <- tempfile(fileext = ".png")
 
     png(outfile, width = figattr$png.width, height = figattr$png.height, units = figattr$png.unit, res = figattr$png.res)
@@ -304,7 +317,7 @@ server <- function(input, output, session) {
     mapData <- map_data()
     
     # 2.2.1. map of species -----
-    plot(1, xlim = c(-6,15), ylim = c(51,62), 
+    plot(1, xlim = range(mapData$species$lon, na.rm = TRUE), ylim = range(mapData$species$lat, na.rm = TRUE), 
       t = "n", asp = 2, xlab = "", ylab = "")
     urect <- unique(mapData$species$icesname)
     for(i in seq(urect)){
@@ -327,7 +340,7 @@ server <- function(input, output, session) {
     legend("topright", legend = uSppCol$species, col = uSppCol$col, fill = uSppCol$col)
   
     # 2.2.2. map of gears -----
-    plot(1, xlim = c(-6,15), ylim = c(51,62), 
+    plot(1, xlim = range(mapData$gear_type$lon, na.rm = TRUE), ylim = range(mapData$gear_type$lat, na.rm = TRUE), 
       t = "n", asp = 2, xlab = "", ylab = "")
     urect <- unique(mapData$gear_type$icesname)
     for(i in seq(urect)){
